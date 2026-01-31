@@ -921,7 +921,7 @@ function StatCard(label, value, risk = '') {
 async function deleteAuction(id) {
   if (!confirm('Are you sure you want to delete this auction?')) return;
   try {
-    const res = await api(`/ auctions / ${id} `, { method: 'DELETE' });
+    const res = await api(`/auctions/${id}`, { method: 'DELETE' });
     if (res.success) {
       log('Auction deleted', 'success');
       if (state.currentView === 'auction-detail') navigate('auctions');
