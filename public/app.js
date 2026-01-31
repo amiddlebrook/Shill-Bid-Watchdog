@@ -603,7 +603,7 @@ function ChatConsole() {
                     </div>
                 </form>
             </div>
-        </div >
+        </div>
     `;
 }
 
@@ -785,12 +785,9 @@ function AlertsView() {
     `;
 }
 
-`;
-  }
-
-  function ListsView() {
-    return `
-  < main class="main" >
+function ListsView() {
+  return `
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Custom Lists</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -828,16 +825,16 @@ function AlertsView() {
                     </table>
                 </div>
             </div>
-        </main >
+        </main>
   `;
-  }
-  
-  function AssessmentsView() {
-      // Filter for auctions with analysis logic (e.g. risk score > 0 or has alerts)
-      const assessedAuctions = state.auctions.filter(a => a.risk_score > 0 || a.risk_level !== 'NONE');
-      
-      return `
-  < main class="main" >
+}
+
+function AssessmentsView() {
+  // Filter for auctions with analysis logic (e.g. risk score > 0 or has alerts)
+  const assessedAuctions = state.auctions.filter(a => a.risk_score > 0 || a.risk_level !== 'NONE');
+
+  return `
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Assessments</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -846,9 +843,9 @@ function AlertsView() {
             <div class="card">
                 <div class="card-header"><span class="card-title">Risk Assessments</span></div>
                 <div class="card-body" style="padding: 0">
-                    ${assessedAuctions.length === 0 ? 
-                        '<div class="empty-state"><div class="empty-icon">✓</div><div>No risks detected yet</div></div>' :
-                        `<table class="table">
+                    ${assessedAuctions.length === 0 ?
+      '<div class="empty-state"><div class="empty-icon">✓</div><div>No risks detected yet</div></div>' :
+      `<table class="table">
                             <thead>
                                 <tr>
                                     <th>Auction</th>
@@ -868,22 +865,22 @@ function AlertsView() {
                                 `).join('')}
                             </tbody>
                         </table>`
-                    }
+    }
                 </div>
             </div>
-        </main >
+        </main>
   `;
-  }
+}
 
-  function BiddersView() {
-    // Get unique bidders from auctions
-    const bidderMap = {};
-    state.auctions.forEach(a => {
-      // We'd need bid data to show bidders - for now show placeholder
-    });
+function BiddersView() {
+  // Get unique bidders from auctions
+  const bidderMap = {};
+  state.auctions.forEach(a => {
+    // We'd need bid data to show bidders - for now show placeholder
+  });
 
-    return `
-  < main class="main" >
+  return `
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Bidders</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -901,47 +898,47 @@ function AlertsView() {
                     </div>
                 </div>
             </div>
-        </main >
+        </main>
   `;
-  }
+}
 
 
 
-  // ============================================================================
-  // SHARED COMPONENTS
-  // ============================================================================
+// ============================================================================
+// SHARED COMPONENTS
+// ============================================================================
 
-  function StatCard(label, value, risk = '') {
-    const color = risk ? `style = "color: var(--risk-${risk})"` : '';
-    return `
-  < div class="stat-card" >
+function StatCard(label, value, risk = '') {
+  const color = risk ? `style = "color: var(--risk-${risk})"` : '';
+  return `
+        <div class="stat-card">
             <div class="stat-label">${label}</div>
             <div class="stat-value" ${color}>${value}</div>
-        </div >
+        </div>
   `;
+}
+
+async function deleteAuction(id) {
+  if (!confirm('Are you sure you want to delete this auction?')) return;
+  try {
+    const res = await api(`/ auctions / ${id} `, { method: 'DELETE' });
+    if (res.success) {
+      log('Auction deleted', 'success');
+      if (state.currentView === 'auction-detail') navigate('auctions');
+      await loadData();
+    }
+  } catch (e) {
+    log('Failed to delete auction', 'error');
+  }
+}
+
+function AuctionsTable(auctions, showActions = false) {
+  if (auctions.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon">📭</div><div>No auctions yet</div></div>';
   }
 
-  async function deleteAuction(id) {
-    if (!confirm('Are you sure you want to delete this auction?')) return;
-    try {
-      const res = await api(`/ auctions / ${ id } `, { method: 'DELETE' });
-      if (res.success) {
-        log('Auction deleted', 'success');
-        if (state.currentView === 'auction-detail') navigate('auctions');
-        await loadData();
-      }
-    } catch (e) {
-      log('Failed to delete auction', 'error');
-    }
-  }
-
-  function AuctionsTable(auctions, showActions = false) {
-    if (auctions.length === 0) {
-      return '<div class="empty-state"><div class="empty-icon">📭</div><div>No auctions yet</div></div>';
-    }
-
-    return `
-  < div class="table-container" >
+  return `
+        <div class="table-container">
     <table class="table">
       <thead>
         <tr>
@@ -981,13 +978,13 @@ function AlertsView() {
                     `).join('')}
       </tbody>
     </table>
-        </div >
+        </div>
   `;
-  }
+}
 
-  function AlertItem(alert) {
-    return `
-  < div class="alert-item" >
+function AlertItem(alert) {
+  return `
+        <div class="alert-item">
             <div class="alert-indicator ${(alert.risk_level || 'low').toLowerCase()}"></div>
             <div class="alert-content">
                 <div class="alert-title">${alert.item_name || alert.auction_code || 'Alert'}</div>
@@ -996,80 +993,80 @@ function AlertsView() {
                 </div>
             </div>
             <button class="btn btn-sm btn-secondary" onclick="acknowledgeAlert(${alert.id})">Dismiss</button>
-        </div >
+        </div>
   `;
-  }
+}
 
-  function renderLogs(count) {
-    const logs = state.logs.slice(0, count);
-    if (logs.length === 0) {
-      return '<div class="empty-state">No activity yet</div>';
-    }
-    return logs.map(e => `
-  < div class="log-entry ${e.type}" >
+function renderLogs(count) {
+  const logs = state.logs.slice(0, count);
+  if (logs.length === 0) {
+    return '<div class="empty-state">No activity yet</div>';
+  }
+  return logs.map(e => `
+        <div class="log-entry ${e.type}">
             <span class="log-time">${e.time}</span>
             <span class="log-message">${e.message}</span>
-        </div >
+        </div>
   `).join('');
+}
+
+function formatTime(isoString) {
+  if (!isoString) return 'Unknown';
+  const date = new Date(isoString);
+  const now = new Date();
+  const diff = now - date;
+
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return date.toLocaleDateString();
+}
+
+// ============================================================================
+// RENDER
+// ============================================================================
+
+function render() {
+  const root = document.getElementById('root');
+
+  let mainContent;
+  switch (state.currentView) {
+    case 'auctions': mainContent = AuctionsView(); break;
+    case 'auction-detail': mainContent = AuctionDetailView(); break;
+    case 'lists': mainContent = ListsView(); break;
+    case 'assessments': mainContent = AssessmentsView(); break;
+    case 'alerts': mainContent = AlertsView(); break;
+    case 'bidders': mainContent = BiddersView(); break;
+    default: mainContent = DashboardView();
   }
 
-  function formatTime(isoString) {
-    if (!isoString) return 'Unknown';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diff = now - date;
-
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${ Math.floor(diff / 60000) }m ago`;
-    if (diff < 86400000) return `${ Math.floor(diff / 3600000) }h ago`;
-    return date.toLocaleDateString();
-  }
-
-  // ============================================================================
-  // RENDER
-  // ============================================================================
-
-  function render() {
-    const root = document.getElementById('root');
-
-    let mainContent;
-    switch (state.currentView) {
-      case 'auctions': mainContent = AuctionsView(); break;
-      case 'auction-detail': mainContent = AuctionDetailView(); break;
-      case 'lists': mainContent = ListsView(); break;
-      case 'assessments': mainContent = AssessmentsView(); break;
-      case 'alerts': mainContent = AlertsView(); break;
-      case 'bidders': mainContent = BiddersView(); break;
-      default: mainContent = DashboardView();
-    }
-
-    root.innerHTML = `
-  < div class="app" >
-    ${ Header() }
-            ${ Tabs() }
+  root.innerHTML = `
+        <div class="app">
+    ${Header()}
+            ${Tabs()}
 <div class="app-content">
   ${Sidebar()}
   ${mainContent}
 </div>
-        </div >
+        </div>
   `;
 
-    updateStatusIndicator();
-  }
+  updateStatusIndicator();
+}
 
-  // ============================================================================
-  // INITIALIZE
-  // ============================================================================
+// ============================================================================
+// INITIALIZE
+// ============================================================================
 
-  document.addEventListener('DOMContentLoaded', () => {
-    log('Initializing ShillBid Watchdog...', 'info');
-    render();
-    checkHealth();
+document.addEventListener('DOMContentLoaded', () => {
+  log('Initializing ShillBid Watchdog...', 'info');
+  render();
+  checkHealth();
+  loadData();
+
+  // Auto-refresh every 30 seconds
+  setInterval(() => {
+    log('Auto-refresh', 'info');
     loadData();
-
-    // Auto-refresh every 30 seconds
-    setInterval(() => {
-      log('Auto-refresh', 'info');
-      loadData();
-    }, 30000);
-  });
+  }, 30000);
+});
