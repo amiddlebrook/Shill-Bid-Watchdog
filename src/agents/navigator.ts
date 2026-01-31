@@ -597,10 +597,11 @@ export async function storeAuctionData(
         UPDATE auctions SET
             item_name = ?,
             current_price = ?,
+            start_price = ?,
             status = ?,
             updated_at = datetime('now')
         WHERE id = ?
-        `).bind(result.itemName, result.currentPrice, result.status || 'watching', targetDbId).run();
+        `).bind(result.itemName, result.currentPrice, result.msrp || 0, result.status || 'watching', targetDbId).run();
         auctionDbId = targetDbId;
     } else {
         // Fallback: Check if auction already exists by ID string
@@ -614,22 +615,24 @@ export async function storeAuctionData(
         UPDATE auctions SET
             item_name = ?,
             current_price = ?,
+            start_price = ?,
             status = ?,
             updated_at = datetime('now')
         WHERE id = ?
-        `).bind(result.itemName, result.currentPrice, result.status || 'watching', existing.id).run();
+        `).bind(result.itemName, result.currentPrice, result.msrp || 0, result.status || 'watching', existing.id).run();
             auctionDbId = existing.id;
         } else {
             // Create new auction
             const insertResult = await env.DB.prepare(`
-        INSERT INTO auctions (auction_id, source, url, item_name, current_price, status)
-        VALUES (?, 'bidfta', ?, ?, ?, ?)
+        INSERT INTO auctions (auction_id, source, url, item_name, current_price, start_price, status)
+        VALUES (?, 'bidfta', ?, ?, ?, ?, ?)
         RETURNING id
         `).bind(
                 result.auctionId,
                 result.auctionNumber ? `https://www.bidfta.com/items?item=${result.auctionNumber}` : '',
                 result.itemName,
                 result.currentPrice,
+                result.msrp || 0,
                 result.status || 'watching'
             ).first() as any;
             auctionDbId = insertResult.id;

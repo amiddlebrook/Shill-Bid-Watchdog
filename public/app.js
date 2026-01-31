@@ -690,13 +690,35 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!-- Auction Info -->
-            <div class="grid-4 mb-4">
-                ${StatCard('Risk Level', auction.risk_level || 'NONE', (auction.risk_level || 'none').toLowerCase())}
-                ${StatCard('Risk Score', auction.risk_score || 0)}
-                ${StatCard('Total Bids', bids?.length || 0)}
-                ${StatCard('Alerts', alerts?.length || 0, alerts?.length > 0 ? 'high' : '')}
-            </div>
+                <!-- Stats -->
+                ${(() => {
+      if (!bids || bids.length === 0) return '';
+      const bidderCounts = {};
+      bids.forEach(b => {
+        bidderCounts[b.bidder_id] = (bidderCounts[b.bidder_id] || 0) + 1;
+      });
+      const uniqueBidders = Object.keys(bidderCounts).length;
+      const repeatBidders = Object.values(bidderCounts).filter(c => c > 1).length;
+      const topBidder = Object.entries(bidderCounts).sort((a, b) => b[1] - a[1])[0];
+
+      return `
+                    <div class="grid-4 mb-4">
+                        ${StatCard('Risk Level', auction.risk_level || 'NONE', (auction.risk_level || 'none').toLowerCase())}
+                        ${StatCard('Unique Bidders', uniqueBidders)}
+                        ${StatCard('Repeat Bidders', repeatBidders, repeatBidders > 1 ? 'warning' : '')}
+                        ${StatCard('Total Bids', bids.length)}
+                    </div>
+                    `;
+    })()}
+
+                <!-- Old Grid (Fallback/Hidden if no bids) -->
+                ${(!bids || bids.length === 0) ? `
+                <div class="grid-4 mb-4">
+                    ${StatCard('Risk Level', auction.risk_level || 'NONE', (auction.risk_level || 'none').toLowerCase())}
+                    ${StatCard('Risk Score', auction.risk_score || 0)}
+                    ${StatCard('Total Bids', bids?.length || 0)}
+                    ${StatCard('Alerts', alerts?.length || 0, alerts?.length > 0 ? 'high' : '')}
+                </div>` : ''}
             
             <!-- Details -->
             <div class="card mb-4">
@@ -705,7 +727,7 @@ function AuctionDetailView() {
                     <table class="detail-table">
                         <tr><td class="text-muted">Item Name</td><td>${auction.item_name || 'Pending extraction'}</td></tr>
                         <tr><td class="text-muted">Current Price</td><td>$${auction.current_price || 'N/A'}</td></tr>
-                        <tr><td class="text-muted">Start Price</td><td>$${auction.start_price || 'N/A'}</td></tr>
+                        <tr><td class="text-muted">MSRP</td><td>$${auction.start_price || 'N/A'}</td></tr>
                         <tr><td class="text-muted">Last Checked</td><td>${auction.last_checked || 'Never'}</td></tr>
                         <tr><td class="text-muted">URL</td><td><a href="${auction.url}" target="_blank" class="table-link">${auction.url}</a></td></tr>
                     </table>
