@@ -16,6 +16,7 @@ import type {
 import { computeFeatures } from '../features';
 import { runDetectionRules } from '../rules';
 import { runHistoricalDetection } from '../historical';
+import { runBidFTADetection } from '../bidfta';
 import { calculateRiskScore, getRiskLevel } from '../scoring';
 
 /**
@@ -42,16 +43,24 @@ export async function analyzeAuction(
     const ruleResults = runDetectionRules(features);
 
     // Step 3: Run historical pattern detection (rules 5-7)
-    let historicalResults = { violations: [] as string[], evidence: [] as Evidence[], suspicionScores: {} };
+    let historicalResults = { violations: [] as string[], evidence: [] as Evidence[], suspicionScores: {} as Record<string, number> };
     try {
         historicalResults = await runHistoricalDetection(auctionId, env);
     } catch (error) {
         console.error('Historical detection failed:', error);
     }
 
+    // Step 4: Run BidFTA-specific detection (rules 8-11)
+    let bidftaResults = { violations: [] as string[], evidence: [] as Evidence[], suspicionScores: {} as Record<string, number> };
+    try {
+        bidftaResults = await runBidFTADetection(auctionId, env);
+    } catch (error) {
+        console.error('BidFTA detection failed:', error);
+    }
+
     // Combine all violations and evidence
-    const allViolations = [...ruleResults.violations, ...historicalResults.violations];
-    const allEvidence = [...ruleResults.evidence, ...historicalResults.evidence];
+    const allViolations = [...ruleResults.violations, ...historicalResults.violations, ...bidftaResults.violations];
+    const allEvidence = [...ruleResults.evidence, ...historicalResults.evidence, ...bidftaResults.evidence];
 
     // Step 4: Calculate risk score (now includes historical patterns)
     const riskScore = calculateRiskScore(features, { violations: allViolations, evidence: allEvidence });
@@ -79,8 +88,9 @@ export async function analyzeAuction(
     WHERE id = ?
   `).bind(riskLevel, riskScore, auctionId).run();
 
-    // Step 8: Update bidder suspicion scores (including historical scores)
-    await updateBidderScores(features, historicalResults.suspicionScores, env);
+    // Step 8: Update bidder suspicion scores (including historical + BidFTA scores)
+    const combinedScores = { ...historicalResults.suspicionScores, ...bidftaResults.suspicionScores };
+    await updateBidderScores(features, combinedScores, env);
 
     // Step 9: Update bidding pairs
     await updateBiddingPairs(features, env);
@@ -225,6 +235,10 @@ function generateAlertSummary(violations: string[], riskLevel: RiskLevel): strin
             case 'seller_follower': return 'seller follower pattern';
             case 'relist_shill': return 'relist shill pattern';
             case 'loss_leader': return 'loss leader pattern';
+            case 'relist_stalker': return 'relist stalker (same bidder on relisted items)';
+            case 'penny_sniper': return 'penny sniping (max bid exposure)';
+            case 'never_pickup': return 'never-pickup pattern';
+            case 'serial_loser': return 'serial loser pattern';
             default: return v;
         }
     });
