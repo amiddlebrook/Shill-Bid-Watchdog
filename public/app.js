@@ -789,44 +789,44 @@ function parseMarkdown(text) {
   function ListsView() {
     return `
     < main class="main" >
-              <div class="page-header">
-                  <h1 class="page-title">Custom Lists</h1>
-                  <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
-              </div>
-              
-              <div class="card mb-4">
-                  <div class="card-header"><span class="card-title">Generated Lists</span></div>
-                  <div class="card-body">
-                      <div class="empty-state">
-                          <div class="empty-icon">📝</div>
-                          <div>Ask the Agent to create a custom list</div>
-                          <div class="text-muted text-sm">Example: "List all auctions with high risk > 0.8"</div>
-                      </div>
-                  </div>
-              </div>
-  
-              <div class="card">
-                  <div class="card-header"><span class="card-title">Standard Views</span></div>
-                  <div class="card-body" style="padding: 0">
-                       <table class="table">
-                          <tbody>
-                              <tr>
-                                  <td><a onclick="navigate('auctions')" style="cursor:pointer;color:#58a6ff">All Auctions</a></td>
-                                  <td class="text-right text-muted">${state.stats.totalAuctions} items</td>
-                              </tr>
-                              <tr>
-                                  <td><a onclick="navigate('alerts')" style="cursor:pointer;color:#58a6ff">Active Alerts</a></td>
-                                  <td class="text-right text-muted">${state.stats.activeAlerts} items</td>
-                              </tr>
-                               <tr>
-                                  <td><a onclick="navigate('bidders')" style="cursor:pointer;color:#58a6ff">Suspicious Bidders</a></td>
-                                  <td class="text-right text-muted">${state.stats.suspiciousBidders} items</td>
-                              </tr>
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-          </main >
+            <div class="page-header">
+                <h1 class="page-title">Custom Lists</h1>
+                <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Generated Lists</span></div>
+                <div class="card-body">
+                    <div class="empty-state">
+                        <div class="empty-icon">📝</div>
+                        <div>Ask the Agent to create a custom list</div>
+                        <div class="text-muted text-sm">Example: "List all auctions with high risk > 0.8"</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><span class="card-title">Standard Views</span></div>
+                <div class="card-body" style="padding: 0">
+                     <table class="table">
+                        <tbody>
+                            <tr>
+                                <td><a onclick="navigate('auctions')" style="cursor:pointer;color:#58a6ff">All Auctions</a></td>
+                                <td class="text-right text-muted">${state.stats.totalAuctions} items</td>
+                            </tr>
+                            <tr>
+                                <td><a onclick="navigate('alerts')" style="cursor:pointer;color:#58a6ff">Active Alerts</a></td>
+                                <td class="text-right text-muted">${state.stats.activeAlerts} items</td>
+                            </tr>
+                             <tr>
+                                <td><a onclick="navigate('bidders')" style="cursor:pointer;color:#58a6ff">Suspicious Bidders</a></td>
+                                <td class="text-right text-muted">${state.stats.suspiciousBidders} items</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main >
     `;
   }
   
@@ -836,40 +836,40 @@ function parseMarkdown(text) {
       
       return `
     < main class="main" >
-              <div class="page-header">
-                  <h1 class="page-title">Assessments</h1>
-                  <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
-              </div>
-              
-              <div class="card">
-                  <div class="card-header"><span class="card-title">Risk Assessments</span></div>
-                  <div class="card-body" style="padding: 0">
-                      ${assessedAuctions.length === 0 ? 
-                          '<div class="empty-state"><div class="empty-icon">✓</div><div>No risks detected yet</div></div>' :
-                          `<table class="table">
-                              <thead>
-                                  <tr>
-                                      <th>Auction</th>
-                                      <th>Risk Level</th>
-                                      <th>Score</th>
-                                      <th>Findings</th>
-                                  </tr>
-                              </thead>
-                              <tbody>
-                                  ${assessedAuctions.map(a => `
-                                      <tr>
-                                          <td><a href="${a.url}" target="_blank" class="table-link">${a.auction_id}</a></td>
-                                          <td><span class="risk-badge risk-${(a.risk_level || 'none').toLowerCase()}">${a.risk_level}</span></td>
-                                          <td>${(a.risk_score || 0).toFixed(2)}</td>
-                                          <td class="text-muted">Analysis complete. See details.</td>
-                                      </tr>
-                                  `).join('')}
-                              </tbody>
-                          </table>`
-                      }
-                  </div>
-              </div>
-          </main >
+            <div class="page-header">
+                <h1 class="page-title">Assessments</h1>
+                <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><span class="card-title">Risk Assessments</span></div>
+                <div class="card-body" style="padding: 0">
+                    ${assessedAuctions.length === 0 ? 
+                        '<div class="empty-state"><div class="empty-icon">✓</div><div>No risks detected yet</div></div>' :
+                        `<table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Auction</th>
+                                    <th>Risk Level</th>
+                                    <th>Score</th>
+                                    <th>Findings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${assessedAuctions.map(a => `
+                                    <tr>
+                                        <td><a href="${a.url}" target="_blank" class="table-link">${a.auction_id}</a></td>
+                                        <td><span class="risk-badge risk-${(a.risk_level || 'none').toLowerCase()}">${a.risk_level}</span></td>
+                                        <td>${(a.risk_score || 0).toFixed(2)}</td>
+                                        <td class="text-muted">Analysis complete. See details.</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>`
+                    }
+                </div>
+            </div>
+        </main >
     `;
   }
 
