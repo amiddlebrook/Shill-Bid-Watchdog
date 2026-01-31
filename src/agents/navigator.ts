@@ -185,18 +185,42 @@ export async function navigateBidFTA(
 async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
     try {
         const price = await page.evaluate(() => {
-            // Try specific BidFTA selectors first
+            // 1. Try robust regex on full text first (fastest and often most reliable for "Label: Value")
+            const bodyText = document.body.innerText;
+            // Matches "Current Bid: $123.45" or "High Bid: $123.45" or "Price: $123.45"
+            // Also handles newlines between label and value
+            const textMatch = bodyText.match(/(?:Current Bid|High Bid|Price|Winning Bid)[:\s]*\$?([\d,]+\.?\d*)/i);
+            if (textMatch) {
+                return parseFloat(textMatch[1].replace(/,/g, ''));
+            }
+
+            // 2. Try XPath to find "Current Bid" label and getting nearby value
+            const xpath = "//*[contains(text(), 'Current Bid') or contains(text(), 'High Bid')]";
+            const iterator = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+
+            for (let i = 0; i < iterator.snapshotLength; i++) {
+                const labelNode = iterator.snapshotItem(i);
+                if (!labelNode) continue;
+
+                // Check parent text (container)
+                const parentText = labelNode.parentElement?.innerText || '';
+                const parentMatch = parentText.match(/\$([\d,]+\.?\d*)/);
+                if (parentMatch) return parseFloat(parentMatch[1].replace(/,/g, ''));
+
+                // Check next sibling
+                let sibling = labelNode.nextSibling;
+                while (sibling) {
+                    const siblingText = sibling.textContent || '';
+                    const siblingMatch = siblingText.match(/\$([\d,]+\.?\d*)/);
+                    if (siblingMatch) return parseFloat(siblingMatch[1].replace(/,/g, ''));
+                    sibling = sibling.nextSibling;
+                }
+            }
+
+            // 3. Fallback: Look for ANY element with class specifically indicating price
             const selectors = [
-                '#current-bid',
-                '.current-bid',
-                '.bid-amount',
-                '[class*="Price"]',
-                '.current-bid',
-                '.bid-amount',
-                '[class*="Price"]',
-                '[class*="amount"]',
-                '.winning-bid',
-                '[class*="WinningBid"]'
+                '#current-bid', '.current-bid', '.bid-amount',
+                '[class*="Price"]', '[class*="winning-bid"]'
             ];
 
             for (const selector of selectors) {
