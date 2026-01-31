@@ -499,16 +499,16 @@ function ChatConsole() {
 
 function DashboardView() {
   return `
-    < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Dashboard</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
             </div>
             
-            <!--AI Chat Agent-- >
-    ${ChatConsole()}
+            <!-- AI Chat Agent -->
+            ${ChatConsole()}
             
-            < !--Stats Grid-- >
+            <!-- Stats Grid -->
             <div class="grid-4">
                 ${StatCard('Auctions', state.stats.totalAuctions)}
                 ${StatCard('Alerts', state.stats.activeAlerts, 'critical')}
@@ -516,7 +516,7 @@ function DashboardView() {
                 ${StatCard('Analyzed', state.auctions.filter(a => a.last_checked).length)}
             </div>
             
-            <!--Activity Log-- >
+            <!-- Activity Log -->
             <div class="card mb-4">
                 <div class="card-header">
                     <span class="card-title">Activity Log</span>
@@ -529,29 +529,29 @@ function DashboardView() {
                 </div>
             </div>
             
-            <!--Recent Auctions-- >
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Recent Auctions</span>
-        <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
-      </div>
-      <div class="card-body" style="padding: 0">
-        ${AuctionsTable(state.auctions.slice(0, 5))}
-      </div>
-    </div>
-        </main >
+            <!-- Recent Auctions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Auctions</span>
+                    <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
+                </div>
+                <div class="card-body" style="padding: 0">
+                    ${AuctionsTable(state.auctions.slice(0, 5))}
+                </div>
+            </div>
+        </main>
     `;
 }
 
 function AuctionsView() {
   return `
-    < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Auctions</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
             </div>
             
-            <!--Quick Add-- >
+            <!-- Quick Add -->
             <div class="card mb-4">
                 <div class="card-body">
                     <form onsubmit="handleSubmit(event)">
@@ -566,16 +566,16 @@ function AuctionsView() {
                 </div>
             </div>
             
-            <!--Auctions Table-- >
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">All Auctions (${state.auctions.length})</span>
-      </div>
-      <div class="card-body" style="padding: 0">
-        ${AuctionsTable(state.auctions, true)}
-      </div>
-    </div>
-        </main >
+            <!-- Auctions Table -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">All Auctions (${state.auctions.length})</span>
+                </div>
+                <div class="card-body" style="padding: 0">
+                    ${AuctionsTable(state.auctions, true)}
+                </div>
+            </div>
+        </main>
     `;
 }
 
@@ -583,11 +583,11 @@ function AuctionDetailView() {
   const { auction, bids, alerts } = state.selectedAuction || {};
 
   if (!auction) {
-    return `< main class="main" > <div class="empty-state">Loading...</div></main > `;
+    return `<main class="main"><div class="empty-state">Loading...</div></main>`;
   }
 
   return `
-    < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">
                     <span class="text-muted" style="cursor:pointer" onclick="navigate('auctions')">Auctions /</span>
@@ -601,7 +601,7 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!--Auction Info-- >
+            <!-- Auction Info -->
             <div class="grid-4 mb-4">
                 ${StatCard('Risk Level', auction.risk_level || 'NONE', (auction.risk_level || 'none').toLowerCase())}
                 ${StatCard('Risk Score', auction.risk_score || 0)}
@@ -609,7 +609,7 @@ function AuctionDetailView() {
                 ${StatCard('Alerts', alerts?.length || 0, alerts?.length > 0 ? 'high' : '')}
             </div>
             
-            <!--Details -->
+            <!-- Details -->
             <div class="card mb-4">
                 <div class="card-header"><span class="card-title">Details</span></div>
                 <div class="card-body">
@@ -624,7 +624,7 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!--Bid History-- >
+            <!-- Bid History -->
             <div class="card mb-4">
                 <div class="card-header"><span class="card-title">Bid History (${bids?.length || 0})</span></div>
                 <div class="card-body" style="padding: 0">
@@ -648,8 +648,8 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!--Alerts for this auction-- >
-    ${alerts && alerts.length > 0 ? `
+            <!-- Alerts for this auction -->
+            ${alerts && alerts.length > 0 ? `
                 <div class="card">
                     <div class="card-header"><span class="card-title">Alerts</span></div>
                     <div class="card-body" style="padding: 0">
@@ -657,13 +657,13 @@ function AuctionDetailView() {
                     </div>
                 </div>
             ` : ''}
-        </main >
-  `;
+        </main>
+    `;
 }
 
 function AlertsView() {
   return `
-  < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Alerts</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -680,8 +680,8 @@ function AlertsView() {
     }
                 </div>
             </div>
-        </main >
-  `;
+        </main>
+    `;
 }
 
 function BiddersView() {
@@ -692,7 +692,7 @@ function BiddersView() {
   });
 
   return `
-  < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Bidders</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -710,8 +710,8 @@ function BiddersView() {
                     </div>
                 </div>
             </div>
-        </main >
-  `;
+        </main>
+    `;
 }
 
 function LogsView() {
