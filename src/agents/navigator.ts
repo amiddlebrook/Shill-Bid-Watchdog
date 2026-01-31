@@ -60,7 +60,8 @@ export async function navigateBidFTA(
 
         // Navigate with human-like timing
         console.log(`[Navigator] Navigating to ${url}...`);
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        // Use 'load' instead of 'networkidle2' which is often flakey in CI/Cloudflare
+        await page.goto(url, { waitUntil: 'load', timeout: 60000 });
 
         // Random delay to appear human
         await delay(2000 + Math.random() * 2000);
@@ -382,43 +383,74 @@ async function openBidHistoryPopup(page: Page): Promise<void> {
     try {
         console.log('[Navigator] Attempting to open bid history...');
 
-        let clicked = await page.evaluate(() => {
-            const labels = ["Bids", "History", "Current Bid", "Current bid", "Bid History"];
-            const elements = Array.from(document.querySelectorAll('button, a, div, span, p, h4')).reverse();
+        let clickMethod = await page.evaluate(() => {
+            const elements = Array.from(document.querySelectorAll('button, a, div, span, p, h4'));
 
-            for (const el of elements) {
-                const text = (el as HTMLElement).innerText || '';
-                // Avoid clicking the "Increments" link if possible
-                if (text.toLowerCase().includes('increment')) continue;
+            // 1. Search for "X Bids" link specifically (highest priority)
+            const bidsLink = elements.find(el => {
+                const text = (el as HTMLElement).innerText?.trim() || '';
+                return /^\d+\s*Bids?$/i.test(text);
+            });
 
-                if (labels.some(l => text.includes(l))) {
-                    console.log(`[Browser] Clicking potential history trigger: ${text}`);
-                    (el as HTMLElement).scrollIntoView();
-                    (el as HTMLElement).click();
-                    return true;
+            if (bidsLink) {
+                console.log(`[Browser] Clicking specific Bids link: ${(bidsLink as HTMLElement).innerText}`);
+                (bidsLink as HTMLElement).scrollIntoView();
+                (bidsLink as HTMLElement).click();
+                return "bids_link";
+            }
+
+            // 2. Search for "Bid History" or "Current Bid" labels
+            const labels = ["Bid History", "Current Bid", "Current bid", "History"];
+            for (const label of labels) {
+                const target = elements.find(el => {
+                    const text = (el as HTMLElement).innerText || '';
+                    return text.includes(label) && !text.toLowerCase().includes('increment');
+                });
+                if (target) {
+                    console.log(`[Browser] Clicking label trigger: ${label}`);
+                    (target as HTMLElement).click();
+                    return "label_click";
                 }
             }
 
-            // Fallback: Click price area
-            const priceEl = Array.from(document.querySelectorAll('*')).find(e =>
-                (e as HTMLElement).innerText &&
-                (e as HTMLElement).innerText.includes('$') &&
-                e.children.length === 0
+            // 3. Last resort: Click anything with a $ sign and no children (likely the price)
+            const priceEl = elements.find(el =>
+                (el as HTMLElement).innerText?.includes('$') &&
+                el.children.length === 0
             );
             if (priceEl) {
-                console.log(`[Browser] Clicking price fallback: ${(priceEl as HTMLElement).innerText}`);
+                console.log(`[Browser] Clicking price area: ${(priceEl as HTMLElement).innerText}`);
                 (priceEl as HTMLElement).click();
-                return true;
+                return "price_fallback";
             }
 
-            return false;
+            return null;
         });
 
-        if (clicked) {
-            console.log('[Navigator] Trigger clicked, waiting for modal...');
-            await delay(2500);
-        } else {
-            console.warn('[Navigator] No history trigger found via text scanning');
+        if (clickMethod) {
+            console.log(`[Navigator] Trigger [${clickMethod}] clicked, waiting for modal content...`);
+            // Wait for ANY table to appear
+            try {
+                await page.waitForSelector('table', { timeout: 5000 });
+                // Check if it's the right table
+                const isBidTable = await page.evaluate(() => {
+                    const table = document.querySelector('table');
+                    return table && (table as HTMLElement).innerText.toLowerCase().includes('bidder');
+                });
+                if (!isBidTable) {
+                    console.log('[Navigator] Found table but not bid history. Retrying trigger...');
+                    // Close the wrong table if it's a modal
+                    await page.evaluate(() => {
+                        const close = document.querySelector('.modal-close, .close-button, [aria-label="Close"]');
+                        if (close) (close as HTMLElement).click();
+                    });
+                    await delay(1000);
+                } else {
+                    return; // Success!
+                }
+            } catch (e) {
+                console.log('[Navigator] Modal table did not appear within 5s');
+            }
         }
 
     } catch (error) {
