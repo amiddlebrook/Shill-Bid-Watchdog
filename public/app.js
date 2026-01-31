@@ -704,7 +704,6 @@ function AuctionDetailView() {
                 <div class="card-body">
                     <table class="detail-table">
                         <tr><td class="text-muted">Item Name</td><td>${auction.item_name || 'Pending extraction'}</td></tr>
-                        <tr><td class="text-muted">Status</td><td><span class="status-badge ${auction.status}">${auction.status}</span></td></tr>
                         <tr><td class="text-muted">Current Price</td><td>$${auction.current_price || 'N/A'}</td></tr>
                         <tr><td class="text-muted">Start Price</td><td>$${auction.start_price || 'N/A'}</td></tr>
                         <tr><td class="text-muted">Last Checked</td><td>${auction.last_checked || 'Never'}</td></tr>
@@ -932,7 +931,6 @@ function AuctionsTable(auctions, showActions = false) {
         <tr>
           <th>Auction ID</th>
           <th>Item</th>
-          <th>Status</th>
           <th>Risk</th>
           <th>Bids</th>
           <th>Last Checked</th>
@@ -952,7 +950,6 @@ function AuctionsTable(auctions, showActions = false) {
                                     ${a.item_name || 'Pending extraction...'}
                                 </a>
                             </td>
-                            <td><span class="status-badge ${a.status}">${a.status}</span></td>
                             <td><span class="risk-badge risk-${(a.risk_level || 'none').toLowerCase()}">${a.risk_level || 'NONE'}</span></td>
                             <td>${a.bid_count || 0}</td>
                             <td class="text-muted">${a.last_checked ? formatTime(a.last_checked) : 'Pending'}</td>
