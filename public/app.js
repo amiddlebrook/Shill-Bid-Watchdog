@@ -744,14 +744,25 @@ function AuctionDetailView() {
                                 <tr><th>#</th><th>Bidder</th><th>Amount</th><th>Time</th></tr>
                             </thead>
                             <tbody>
-                                ${bids.map((b, i) => `
-                                    <tr>
-                                        <td>${i + 1}</td>
-                                        <td class="text-mono">${b.bidder_id}</td>
-                                        <td>$${b.amount}</td>
-                                        <td class="text-muted">${b.bid_time || '-'}</td>
-                                    </tr>
-                                `).join('')}
+                                    ${(() => {
+        // Pre-calculate frequencies for badges
+        const frequencies = {};
+        bids.forEach(bid => {
+          frequencies[bid.bidder_id] = (frequencies[bid.bidder_id] || 0) + 1;
+        });
+
+        return bids.map((b, i) => `
+                                            <tr>
+                                                <td>${i + 1}</td>
+                                                <td class="text-mono">
+                                                    ${b.bidder_id}
+                                                    ${frequencies[b.bidder_id] > 1 ? `<span class="badge badge-sm badge-warning" style="margin-left: 5px">${frequencies[b.bidder_id]} bids</span>` : ''}
+                                                </td>
+                                                <td>$${b.amount}</td>
+                                                <td class="text-muted">${b.bid_time || '-'}</td>
+                                            </tr>
+                                        `).join('');
+      })()}
                             </tbody>
                         </table>
                     ` : '<div class="empty-state">No bids extracted yet</div>'}

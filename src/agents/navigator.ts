@@ -303,12 +303,10 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
                 if (line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)) {
                     result.auctionNumber = line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)![1];
                 }
-                if (line.match(/MSRP[:\s]*\$?([\d,.]+)/i)) {
-                    result.msrp = line.match(/MSRP[:\s]*\$?([\d,.]+)/i)![1];
-                }
-                // Also handle "Original Price" or "Retail"
-                if (line.match(/(?:Retail|Original Price)[:\s]*\$?([\d,.]+)/i)) {
-                    result.msrp = line.match(/(?:Retail|Original Price)[:\s]*\$?([\d,.]+)/i)![1];
+                // Broad MSRP match - look for any $ amount after MSRP or Retail
+                const msrpLineMatch = line.match(/(?:MSRP|Retail|Price|Value)[\s\S]*?\$([\d,]+\.?\d*)/i);
+                if (msrpLineMatch && !result.msrp) {
+                    result.msrp = msrpLineMatch[1];
                 }
                 if (line.match(/Condition[:\s]*(.+)/i)) {
                     result.condition = line.match(/Condition[:\s]*(.+)/i)![1].trim();
@@ -369,13 +367,18 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
     try {
         // BidFTA shows bid history when you click on the current bid amount
         const clickTargets = [
+            'button:contains("Current Bid")',
+            'button:contains("Current bid")',
+            'a:contains("Current Bid")',
+            'div:contains("Current Bid")',
+            'span:contains("Current Bid")',
             '#current-bid',
             '.current-bid',
             '[class*="current-bid"]',
             '[class*="bid-amount"]',
             '.winning-bid',
-            'button:has-text("Bid History")',
-            'a:has-text("Bid History")',
+            'button:contains("Bid History")',
+            'a:contains("Bid History")',
             '.price-section',
             '[data-testid="bid-history"]'
         ];
@@ -422,23 +425,27 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
             if (await page.$('table')) return;
         }
 
-        // 3. Try generic "Current Bid" label click fallback
+        // 3. Try generic "Current Bid" or "Bid History" label click fallback
         if (!clicked || !(await page.$('table'))) {
-            await page.evaluate(() => {
-                const xpath = "//*[contains(text(), 'Current Bid')]";
-                const iterator = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                if (iterator.snapshotLength > 0) {
-                    const label = iterator.snapshotItem(0);
-                    if (label) {
-                        // Click label
-                        (label as HTMLElement).click();
-                        // Click parent
-                        (label.parentElement as HTMLElement)?.click();
-                        // Click next sibling
-                        (label.nextSibling as HTMLElement)?.click();
+            const foundCount = await page.evaluate(() => {
+                const labels = ["Current Bid", "Current bid", "Bid History", "history"];
+                let count = 0;
+                labels.forEach(l => {
+                    const xpath = `//*[contains(text(), '${l}')]`;
+                    const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    for (let i = 0; i < result.snapshotLength; i++) {
+                        const el = result.snapshotItem(i) as HTMLElement;
+                        if (el && typeof el.click === 'function') {
+                            el.click();
+                            // If it has a parent that might be the actual button
+                            el.parentElement?.click();
+                            count++;
+                        }
                     }
-                }
+                });
+                return count;
             });
+            if (foundCount > 0) clicked = true;
         }
 
         // Wait for popup animation/load
