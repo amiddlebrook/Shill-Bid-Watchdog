@@ -18,15 +18,6 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 
 // ============================================================================
-// Static Assets (Dashboard)
-// ============================================================================
-
-app.get('/', async (c) => {
-    // Serve the main dashboard
-    return c.html(await getIndexHtml());
-});
-
-// ============================================================================
 // API Routes
 // ============================================================================
 
@@ -373,24 +364,6 @@ function hashCode(str: string): string {
         hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
-}
-
-async function getIndexHtml(): Promise<string> {
-    // This will be replaced with actual static file serving
-    // For now, return a basic dashboard structure
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShillBid Watchdog</title>
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/app.js"></script>
-</body>
-</html>`;
 }
 
 export default app;
