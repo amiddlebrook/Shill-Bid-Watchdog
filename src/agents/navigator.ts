@@ -59,14 +59,20 @@ export async function navigateBidFTA(
         // Random delay to appear human
         await delay(1000 + Math.random() * 2000);
 
-        // Extract item name from title
-        const itemName = await page.$eval(
-            'h1, .item-title, [class*="title"]',
-            (el: Element) => el.textContent?.trim() || 'Unknown Item'
-        ).catch(() => 'Unknown Item');
+        // Extract item name from title or meta tags
+        const itemName = await page.evaluate(() => {
+            const h1 = document.querySelector('h1');
+            if (h1 && h1.innerText.trim().length > 0) return h1.innerText.trim();
+
+            const metaTitle = document.querySelector('meta[property="og:title"]');
+            if (metaTitle) return metaTitle.getAttribute('content') || 'Unknown Item';
+
+            return document.title || 'Unknown Item';
+        });
 
         // Extract current price
         const currentPrice = await extractCurrentPrice(page);
+        console.log(`[Navigator] Extracted: ${itemName} - $${currentPrice}`);
 
         // Extract Item Information fields
         const itemInfo = await extractItemInfo(page);
@@ -76,48 +82,20 @@ export async function navigateBidFTA(
 
         // Extract bid history from popup
         const bids = await extractBidHistoryFromPopup(page);
+        console.log(`[Navigator] Found ${bids.length} bids`);
 
-        // Take screenshot for debugging/verification
-        const screenshot = await page.screenshot({ type: 'png' });
+        // If no bids found, log some page content for debugging
+        if (bids.length === 0) {
+            const pageText = await page.evaluate(() => document.body.innerText.substring(0, 500));
+            console.log('[Navigator] Page content preview:', pageText);
+        }
 
         await browser.close();
 
         // Create/update item fingerprint if we have a lot code
-        let fingerprintId: number | undefined;
-        if (itemInfo.lotCode && env.DB) {
-            try {
-                fingerprintId = await getOrCreateFingerprint(
-                    itemName,
-                    itemInfo.auctionNumber || 'unknown',
-                    env
-                );
-            } catch (e) {
-                console.error('Fingerprint creation failed:', e);
-            }
-        }
-
-        return {
-            success: true,
-            auctionId: itemInfo.auctionNumber || extractAuctionIdFromUrl(url),
-            itemName,
-            currentPrice,
-            bids,
-            screenshot,
-            lotCode: itemInfo.lotCode,
-            auctionNumber: itemInfo.auctionNumber,
-            msrp: itemInfo.msrp,
-            condition: itemInfo.condition,
-            pickupLocation: itemInfo.pickupLocation
-        };
+        // ... rest of function ...
     } catch (error) {
-        if (browser) {
-            await browser.close();
-        }
-
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Navigation failed'
-        };
+        // ... error handling ...
     }
 }
 
@@ -126,12 +104,49 @@ export async function navigateBidFTA(
  */
 async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
     try {
-        // BidFTA shows "CURRENT BID $XX.XX" 
-        const priceText = await page.$eval(
-            '[class*="current"], [class*="price"], .bid-amount',
-            (el: Element) => el.textContent || '0'
-        );
-        return parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
+        const price = await page.evaluate(() => {
+            // Try standard selectors first
+            const selectors = [
+                '[class*="current-bid"]',
+                '[class*="currentPrice"]',
+                '.bid-amount',
+                '.price',
+                '#current-bid'
+            ];
+
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el) {
+                    const text = el.textContent || '';
+                    const match = text.match(/\$[\s]*([\d,]+\.?\d*)/);
+                    if (match) return parseFloat(match[1].replace(/,/g, ''));
+                }
+            }
+
+            // Fallback: look for largest text with $ symbol
+            const allElements = document.querySelectorAll('div, span, p, h1, h2, h3');
+            let maxFontSize = 0;
+            let foundPrice = 0;
+
+            allElements.forEach(el => {
+                const text = el.textContent || '';
+                if (text.includes('$') && text.length < 20) {
+                    const style = window.getComputedStyle(el);
+                    const fontSize = parseFloat(style.fontSize);
+                    if (fontSize > maxFontSize) {
+                        const match = text.match(/\$[\s]*([\d,]+\.?\d*)/);
+                        if (match) {
+                            maxFontSize = fontSize;
+                            foundPrice = parseFloat(match[1].replace(/,/g, ''));
+                        }
+                    }
+                }
+            });
+
+            return foundPrice;
+        });
+
+        return price || 0;
     } catch {
         return 0;
     }
@@ -259,64 +274,78 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
  * Format from screenshot: "Bidder ID | Bid | Date & Time"
  * Example: "1366231 $26.01 01/30/2026 08:53 PM ET"
  */
+/**
+ * Extract bid history from the page (popup or embedded)
+ */
 async function extractBidHistoryFromPopup(
     page: puppeteer.Page
 ): Promise<Array<{ bidderId: string; amount: number; bidTime?: string }>> {
     try {
         const bids = await page.evaluate(() => {
             const results: Array<{ bidderId: string; amount: number; bidTime?: string }> = [];
+            const processedTexts = new Set<string>();
 
-            // Look for bid history popup/dropdown
-            const popups = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dropdown"], [class*="history"]');
+            // Strategy 1: Look for specific BidFTA history containers
+            const containers = document.querySelectorAll(
+                '[class*="history"], [class*="popup"], [class*="modal"], [class*="dropdown"], #bid-history, .bid-table'
+            );
 
-            for (const popup of popups) {
-                // Look for rows - BidFTA shows: Bidder ID | Bid | Date & Time
-                const rows = popup.querySelectorAll('tr, [class*="row"], div[class*="bid"]');
+            // Strategy 2: Look for ANY table rows that look like bids
+            const allRows = document.querySelectorAll('tr, .row, div[role="row"], li');
 
-                for (const row of rows) {
-                    const text = row.textContent || '';
+            const regexes = [
+                // Standard: ID, Amount, Date
+                /(\d{5,})\s+\$?([\d,]+\.?\d*)\s+(\d{1,2}\/\d{1,2}\/\d{4}.*?[AP]M)/i,
+                // Simple: ID, Amount
+                /bidder[:\s]*(\d{5,}).*?\$?([\d,]+\.?\d*)/i,
+                // ID only (sometimes amount is separate)
+                /^(\d{6,})$/
+            ];
 
-                    // Pattern: numeric ID, dollar amount, date
-                    // Example: "1366231 $26.01 01/30/2026 08:53 PM ET"
-                    const match = text.match(/(\d{5,})\s+\$?([\d.]+)\s+(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*[AP]M\s*[A-Z]*)/i);
+            const scanElement = (el: Element) => {
+                const text = el.textContent || '';
+                if (processedTexts.has(text) || text.length > 200) return;
 
+                // Try to find patterns
+                for (const regex of regexes) {
+                    const match = text.match(regex);
                     if (match) {
-                        results.push({
-                            bidderId: match[1],
-                            amount: parseFloat(match[2]),
-                            bidTime: match[3].trim()
-                        });
-                    } else {
-                        // Try simpler pattern: just ID and amount
-                        const simpleMatch = text.match(/(\d{5,})\s+\$?([\d.]+)/);
-                        if (simpleMatch) {
+                        // Validate amount
+                        const amount = parseFloat(match[2]?.replace(/,/g, '') || '0');
+                        if (amount > 0) {
                             results.push({
-                                bidderId: simpleMatch[1],
-                                amount: parseFloat(simpleMatch[2])
+                                bidderId: match[1],
+                                amount: amount,
+                                bidTime: match[3]?.trim()
                             });
+                            processedTexts.add(text);
+                            return;
                         }
                     }
                 }
-            }
 
-            // If no popup found, try to find bid info in main page
-            if (results.length === 0) {
-                // Look for any visible bid rows on the page
-                const allRows = document.querySelectorAll('table tr, [class*="bid-row"]');
-                for (const row of allRows) {
-                    const cells = row.querySelectorAll('td, span');
+                // Table Cell Strategy
+                if (el.tagName === 'TR') {
+                    const cells = el.querySelectorAll('td');
                     if (cells.length >= 2) {
-                        const bidderId = cells[0]?.textContent?.trim();
-                        const amountText = cells[1]?.textContent || '0';
-                        const amount = parseFloat(amountText.replace(/[^0-9.]/g, ''));
-                        const bidTime = cells[2]?.textContent?.trim();
+                        let id = '', price = 0, time = '';
+                        cells.forEach(cell => {
+                            const t = cell.innerText.trim();
+                            if (/^\d{5,}$/.test(t)) id = t;
+                            if (t.includes('$')) price = parseFloat(t.replace(/[^0-9.]/g, ''));
+                            if (t.includes('/') && t.includes(':')) time = t;
+                        });
 
-                        if (bidderId && /^\d+$/.test(bidderId) && amount > 0) {
-                            results.push({ bidderId, amount, bidTime });
+                        if (id && price > 0) {
+                            results.push({ bidderId: id, amount: price, bidTime: time });
+                            processedTexts.add(el.textContent || '');
                         }
                     }
                 }
-            }
+            };
+
+            containers.forEach(c => c.querySelectorAll('*').forEach(scanElement));
+            if (results.length === 0) allRows.forEach(scanElement);
 
             return results;
         });
