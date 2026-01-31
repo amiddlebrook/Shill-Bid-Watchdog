@@ -88,7 +88,30 @@ async function loadData() {
     ]);
 
     if (auctionsRes.success) {
-      state.auctions = auctionsRes.data || [];
+      // Update state with deduplication
+      const uniqueAuctions = [];
+      const seenUrls = new Set();
+
+      // Prioritize auctions with "bidfta" prefix over "unknown" for same URL
+      const sortedAuctions = (auctionsRes.data || []).sort((a, b) => {
+        // If same URL, prioritize better ID
+        if (a.url === b.url) {
+          if (a.auction_id.startsWith('bidfta')) return -1;
+          if (b.auction_id.startsWith('bidfta')) return 1;
+        }
+        return new Date(b.updated_at) - new Date(a.updated_at);
+      });
+
+      for (const auction of sortedAuctions) {
+        // Deduplicate by URL
+        if (!seenUrls.has(auction.url)) {
+          seenUrls.add(auction.url);
+          uniqueAuctions.push(auction);
+        }
+      }
+
+      state.auctions = uniqueAuctions;
+      state.stats.totalAuctions = state.auctions.length;
       log(`Loaded ${state.auctions.length} auctions`, 'success');
     }
     if (alertsRes.success) {

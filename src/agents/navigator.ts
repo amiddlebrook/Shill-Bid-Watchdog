@@ -50,6 +50,19 @@ export async function navigateBidFTA(
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         );
 
+        // Wait for body to ensure page loaded
+        await page.waitForSelector('body', { timeout: 10000 });
+
+        // Check for blocking/captcha
+        const pageContent = await page.content();
+        if (pageContent.includes('Access Denied') || pageContent.includes('security check') || pageContent.includes('Cloudflare')) {
+            console.warn('[Navigator] Potential blocking validation detected');
+            return {
+                success: false,
+                error: 'Blocked by anti-bot protection'
+            };
+        }
+
         // Navigate with human-like timing
         await page.goto(url, {
             waitUntil: 'networkidle2',
@@ -84,18 +97,52 @@ export async function navigateBidFTA(
         const bids = await extractBidHistoryFromPopup(page);
         console.log(`[Navigator] Found ${bids.length} bids`);
 
-        // If no bids found, log some page content for debugging
-        if (bids.length === 0) {
-            const pageText = await page.evaluate(() => document.body.innerText.substring(0, 500));
-            console.log('[Navigator] Page content preview:', pageText);
+        // Capture page text for debugging if extraction fails
+        let debugText = '';
+        if (itemName === 'Unknown Item' || bids.length === 0) {
+            debugText = await page.evaluate(() => document.body.innerText.substring(0, 1000));
+            console.log('[Navigator] Debug content:', debugText);
         }
 
         await browser.close();
 
         // Create/update item fingerprint if we have a lot code
-        // ... rest of function ...
+        let fingerprintId: number | undefined;
+        if (itemInfo.lotCode && env.DB) {
+            try {
+                fingerprintId = await getOrCreateFingerprint(
+                    itemName,
+                    itemInfo.auctionNumber || 'unknown',
+                    env
+                );
+            } catch (e) {
+                console.error('Fingerprint creation failed:', e);
+            }
+        }
+
+        return {
+            success: true,
+            auctionId: itemInfo.auctionNumber || extractAuctionIdFromUrl(url),
+            itemName,
+            currentPrice,
+            bids,
+            lotCode: itemInfo.lotCode,
+            auctionNumber: itemInfo.auctionNumber,
+            msrp: itemInfo.msrp,
+            condition: itemInfo.condition,
+            pickupLocation: itemInfo.pickupLocation,
+            // Return debug info if needed
+            debug: debugText
+        };
     } catch (error) {
-        // ... error handling ...
+        if (browser) {
+            await browser.close();
+        }
+
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Navigation failed'
+        };
     }
 }
 
@@ -105,45 +152,27 @@ export async function navigateBidFTA(
 async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
     try {
         const price = await page.evaluate(() => {
-            // Try standard selectors first
+            // Try specific BidFTA selectors first
             const selectors = [
-                '[class*="current-bid"]',
-                '[class*="currentPrice"]',
+                '#current-bid',
+                '.current-bid',
                 '.bid-amount',
-                '.price',
-                '#current-bid'
+                '[class*="Price"]',
+                '[class*="amount"]'
             ];
 
             for (const selector of selectors) {
-                const el = document.querySelector(selector);
-                if (el) {
+                const els = document.querySelectorAll(selector);
+                for (const el of els) {
                     const text = el.textContent || '';
-                    const match = text.match(/\$[\s]*([\d,]+\.?\d*)/);
-                    if (match) return parseFloat(match[1].replace(/,/g, ''));
+                    if (text.includes('$')) {
+                        const match = text.match(/\$[\s]*([\d,]+\.?\d*)/);
+                        if (match) return parseFloat(match[1].replace(/,/g, ''));
+                    }
                 }
             }
 
-            // Fallback: look for largest text with $ symbol
-            const allElements = document.querySelectorAll('div, span, p, h1, h2, h3');
-            let maxFontSize = 0;
-            let foundPrice = 0;
-
-            allElements.forEach(el => {
-                const text = el.textContent || '';
-                if (text.includes('$') && text.length < 20) {
-                    const style = window.getComputedStyle(el);
-                    const fontSize = parseFloat(style.fontSize);
-                    if (fontSize > maxFontSize) {
-                        const match = text.match(/\$[\s]*([\d,]+\.?\d*)/);
-                        if (match) {
-                            maxFontSize = fontSize;
-                            foundPrice = parseFloat(match[1].replace(/,/g, ''));
-                        }
-                    }
-                }
-            });
-
-            return foundPrice;
+            return 0;
         });
 
         return price || 0;
