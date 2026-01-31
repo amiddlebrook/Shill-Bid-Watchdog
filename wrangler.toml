@@ -46,3 +46,7 @@ new_classes = ["CoordinatorAgent"]
 # Environment variables
 [vars]
 ENVIRONMENT = "production"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
