@@ -506,8 +506,8 @@ app.post('/api/chat', async (c) => {
         - When presenting lists of any kind (auctions, bidders, logs), ALWAYS use Markdown Tables.
           Format: | ID | Name | Value |...
         - When making assessments:
-          Use `### Key Findings` for bullet points.
-          Use `### Recommendation` for final verdict.
+          Use '### Key Findings' for bullet points.
+          Use '### Recommendation' for final verdict.
         - Start response with a brief 1-line summary.
         - Use bolding (**text**) for important metrics or risks.
         
