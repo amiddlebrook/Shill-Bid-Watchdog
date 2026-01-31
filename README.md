@@ -1,4 +1,4 @@
-# ShillBid Watchdog: Cloudflare AI Agent Swarm Architecture
+# ShillBid Watchdog:
 
 Automated shill-bid detection using **AI Agent Swarm** on Cloudflare Workers with ML-powered analysis.
 
