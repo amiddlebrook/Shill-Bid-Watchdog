@@ -1,397 +1,151 @@
 /**
- * ShillBid Watchdog - Frontend Application
- * Tabbed UI for multiple auction house watchdogs
+ * ShillBid Watchdog - Professional Frontend
+ * Clean, data-focused dashboard with activity logging
  */
 
-// ============================================================================
-// State Management
-// ============================================================================
-
+// State
 const state = {
   auctions: [],
   alerts: [],
-  stats: {
-    totalAuctions: 0,
-    activeAlerts: 0,
-    suspiciousBidders: 0
-  },
-  currentPlatform: 'bidfta',  // 'bidfta' | 'ebay'
+  stats: { totalAuctions: 0, activeAlerts: 0, suspiciousBidders: 0 },
+  logs: [],
   currentView: 'dashboard',
-  loading: false
+  lastUpdate: null,
+  apiStatus: 'checking'
 };
 
-// Platform configurations
-const PLATFORMS = {
-  bidfta: {
-    name: 'BidFTA',
-    icon: '🏪',
-    color: '#00a8cc',
-    placeholder: 'https://www.bidfta.com/items?item=123456',
-    active: true
-  },
-  ebay: {
-    name: 'eBay',
-    icon: '🛒',
-    color: '#e53238',
-    placeholder: 'https://www.ebay.com/itm/123456',
-    active: false  // Not yet implemented
-  }
-};
+// Logging
+function log(message, type = 'info') {
+  const entry = {
+    time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+    message,
+    type
+  };
+  state.logs.unshift(entry);
+  if (state.logs.length > 50) state.logs.pop();
+  updateLogUI();
+}
 
-// ============================================================================
-// API Client
-// ============================================================================
+function updateLogUI() {
+  const logContainer = document.getElementById('activityLog');
+  if (!logContainer) return;
 
-const api = {
-  async get(endpoint) {
-    const response = await fetch(`/api${endpoint}`);
-    return response.json();
-  },
+  logContainer.innerHTML = state.logs.slice(0, 10).map(e => `
+        <div class="log-entry ${e.type}">
+            <span class="log-time">${e.time}</span>
+            <span class="log-message">${e.message}</span>
+        </div>
+    `).join('');
+}
 
-  async post(endpoint, data) {
-    const response = await fetch(`/api${endpoint}`, {
-      method: 'POST',
+// API
+async function api(endpoint, options = {}) {
+  const url = `/api${endpoint}`;
+  try {
+    const res = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      ...options
     });
-    return response.json();
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    log(`API Error: ${error.message}`, 'error');
+    throw error;
   }
-};
-
-// ============================================================================
-// Components
-// ============================================================================
-
-function Header() {
-  return `
-    <header class="header">
-      <div class="logo">
-        <div class="logo-icon"></div>
-        <span>ShillBid Watchdog</span>
-      </div>
-      <div class="header-actions">
-        <div class="agent-status">
-          <span class="agent-dot active"></span>
-          <span>Agents Active</span>
-        </div>
-        <div class="alert-badge" onclick="showAlerts()">
-          🔔
-          <span class="count" id="alertCount">${state.stats.activeAlerts}</span>
-        </div>
-      </div>
-    </header>
-  `;
 }
 
-function PlatformTabs() {
-  return `
-    <div class="platform-tabs">
-      ${Object.entries(PLATFORMS).map(([id, platform]) => `
-        <button 
-          class="platform-tab ${state.currentPlatform === id ? 'active' : ''} ${!platform.active ? 'disabled' : ''}"
-          onclick="${platform.active ? `switchPlatform('${id}')` : ''}"
-          ${!platform.active ? 'disabled' : ''}
-          style="--platform-color: ${platform.color}"
-        >
-          <span class="platform-icon">${platform.icon}</span>
-          <span class="platform-name">${platform.name} Watchdog</span>
-          ${!platform.active ? '<span class="coming-soon">Coming Soon</span>' : ''}
-        </button>
-      `).join('')}
-    </div>
-  `;
-}
-
-function Sidebar() {
-  const platform = PLATFORMS[state.currentPlatform];
-
-  return `
-    <aside class="sidebar">
-      <div class="platform-badge" style="--platform-color: ${platform.color}">
-        <span class="platform-icon">${platform.icon}</span>
-        <span>${platform.name}</span>
-      </div>
-
-      <nav class="nav-section">
-        <div class="nav-title">Navigation</div>
-        <div class="nav-link ${state.currentView === 'dashboard' ? 'active' : ''}" onclick="navigate('dashboard')">
-          📊 Dashboard
-        </div>
-        <div class="nav-link ${state.currentView === 'auctions' ? 'active' : ''}" onclick="navigate('auctions')">
-          🎯 Auctions
-        </div>
-        <div class="nav-link ${state.currentView === 'alerts' ? 'active' : ''}" onclick="navigate('alerts')">
-          ⚠️ Alerts
-        </div>
-        <div class="nav-link ${state.currentView === 'bidders' ? 'active' : ''}" onclick="navigate('bidders')">
-          👤 Bidders
-        </div>
-      </nav>
-
-      <div class="nav-section">
-        <div class="nav-title">Quick Stats</div>
-        <div class="stat-card">
-          <div class="stat-label">Total Auctions</div>
-          <div class="stat-value">${state.stats.totalAuctions}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Active Alerts</div>
-          <div class="stat-value risk-critical">${state.stats.activeAlerts}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Suspicious Bidders</div>
-          <div class="stat-value risk-high">${state.stats.suspiciousBidders}</div>
-        </div>
-      </div>
-
-      <div class="nav-section rules-info">
-        <div class="nav-title">Detection Rules</div>
-        <div class="rule-list">
-          <div class="rule-item">✓ Relist Stalker</div>
-          <div class="rule-item">✓ Penny Sniper</div>
-          <div class="rule-item">✓ Loss Leader</div>
-          <div class="rule-item">✓ Bid Pairs</div>
-        </div>
-      </div>
-    </aside>
-  `;
-}
-
-function Dashboard() {
-  const platform = PLATFORMS[state.currentPlatform];
-
-  return `
-    <div class="main">
-      <h1 class="mb-lg">${platform.icon} ${platform.name} Dashboard</h1>
-      
-      <!-- Watch New Auction Form -->
-      <div class="card mb-lg">
-        <div class="card-header">
-          <h2 class="card-title">🎯 Watch New Auction</h2>
-        </div>
-        <div class="card-body">
-          <form id="watchForm" onsubmit="handleWatchAuction(event)">
-            <div class="form-group">
-              <label class="form-label">${platform.name} Auction URL</label>
-              <input 
-                type="url" 
-                class="form-input" 
-                id="auctionUrl"
-                placeholder="${platform.placeholder}"
-                required
-              >
-            </div>
-            <button type="submit" class="btn btn-primary" style="--btn-color: ${platform.color}">
-              🔍 Start Watching
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <!-- Stats Grid -->
-      <div class="grid-4 mb-lg">
-        ${StatsCard('Total Watched', state.stats.totalAuctions, 'none')}
-        ${StatsCard('Active Alerts', state.stats.activeAlerts, 'critical')}
-        ${StatsCard('Suspicious Bidders', state.stats.suspiciousBidders, 'high')}
-        ${StatsCard('Analyzed Today', 0, 'low')}
-      </div>
-
-      <!-- Recent Alerts -->
-      <div class="card mb-lg">
-        <div class="card-header">
-          <h2 class="card-title">⚠️ Recent Alerts</h2>
-          <button class="btn btn-ghost" onclick="navigate('alerts')">View All</button>
-        </div>
-        <div class="card-body">
-          ${state.alerts.length > 0
-      ? state.alerts.slice(0, 5).map(AlertCard).join('')
-      : EmptyState('No alerts yet', 'Start watching auctions to detect shill bidding')
+// Health Check
+async function checkHealth() {
+  try {
+    const res = await api('/health');
+    if (res.success) {
+      state.apiStatus = 'connected';
+      log('Connected to ShillBid API', 'success');
+    } else {
+      state.apiStatus = 'error';
+      log('API returned error', 'error');
     }
-        </div>
-      </div>
-
-      <!-- Recent Auctions -->
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">🎯 Recent ${platform.name} Auctions</h2>
-          <button class="btn btn-ghost" onclick="navigate('auctions')">View All</button>
-        </div>
-        <div class="card-body">
-          ${state.auctions.length > 0
-      ? AuctionsTable(state.auctions.slice(0, 5))
-      : EmptyState('No auctions watched', `Add a ${platform.name} auction URL above to get started`)
-    }
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function StatsCard(label, value, risk) {
-  return `
-    <div class="stat-card">
-      <div class="stat-label">${label}</div>
-      <div class="stat-value risk-${risk}">${value}</div>
-    </div>
-  `;
-}
-
-function AlertCard(alert) {
-  const riskClass = `risk-${(alert.risk_level || 'none').toLowerCase()}`;
-  const time = alert.created_at ? formatTime(alert.created_at) : 'Just now';
-
-  return `
-    <div class="alert-card ${riskClass}">
-      <div class="alert-header">
-        <div class="alert-title">
-          <span class="risk-badge ${riskClass}">${alert.risk_level}</span>
-          <span>${alert.item_name || `Auction ${alert.auction_code}`}</span>
-        </div>
-        <span class="alert-time">${time}</span>
-      </div>
-      <div class="alert-body">${alert.summary || 'Suspicious activity detected'}</div>
-      ${alert.violations ? `
-        <div class="alert-violations">
-          ${JSON.parse(alert.violations || '[]').map(v => `<span class="violation-tag">${v}</span>`).join('')}
-        </div>
-      ` : ''}
-    </div>
-  `;
-}
-
-function AuctionsTable(auctions) {
-  return `
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Auction</th>
-          <th>Lot Code</th>
-          <th>Bids</th>
-          <th>Risk</th>
-          <th>Last Checked</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${auctions.map(AuctionRow).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-function AuctionRow(auction) {
-  const riskClass = `risk-${(auction.risk_level || 'none').toLowerCase()}`;
-  const time = auction.last_checked ? formatTime(auction.last_checked) : 'Pending';
-
-  return `
-    <tr>
-      <td>
-        <a href="${auction.url}" target="_blank" class="table-link">
-          ${auction.item_name || auction.auction_id}
-        </a>
-      </td>
-      <td class="text-mono">${auction.lot_code || '-'}</td>
-      <td>${auction.bid_count || 0}</td>
-      <td><span class="risk-badge ${riskClass}">${auction.risk_level || 'NONE'}</span></td>
-      <td class="text-muted">${time}</td>
-    </tr>
-  `;
-}
-
-function EmptyState(title, subtitle) {
-  return `
-    <div class="empty-state">
-      <div class="empty-state-icon">📭</div>
-      <div><strong>${title}</strong></div>
-      <div class="text-muted">${subtitle}</div>
-    </div>
-  `;
-}
-
-function AuctionsView() {
-  const platform = PLATFORMS[state.currentPlatform];
-
-  return `
-    <div class="main">
-      <h1 class="mb-lg">${platform.icon} ${platform.name} Auctions</h1>
-      <div class="card">
-        <div class="card-body">
-          ${state.auctions.length > 0
-      ? AuctionsTable(state.auctions)
-      : EmptyState('No auctions', `Watch a ${platform.name} auction to get started`)
-    }
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function AlertsView() {
-  const platform = PLATFORMS[state.currentPlatform];
-
-  return `
-    <div class="main">
-      <h1 class="mb-lg">${platform.icon} ${platform.name} Alerts</h1>
-      <div class="card">
-        <div class="card-body">
-          ${state.alerts.length > 0
-      ? state.alerts.map(AlertCard).join('')
-      : EmptyState('No alerts', 'Alerts will appear when suspicious activity is detected')
-    }
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function EbayPlaceholder() {
-  return `
-    <div class="main">
-      <div class="placeholder-content">
-        <div class="placeholder-icon">🛒</div>
-        <h1>eBay Watchdog</h1>
-        <p class="text-muted">Coming Soon</p>
-        <p>eBay integration is currently in development.</p>
-        <p>Switch to BidFTA Watchdog to start monitoring auctions.</p>
-      </div>
-    </div>
-  `;
-}
-
-// ============================================================================
-// Event Handlers
-// ============================================================================
-
-async function handleWatchAuction(event) {
-  event.preventDefault();
-
-  const urlInput = document.getElementById('auctionUrl');
-  const url = urlInput.value.trim();
-
-  if (!url) return;
-
-  // Validate URL matches platform
-  const platform = state.currentPlatform;
-  if (platform === 'bidfta' && !url.includes('bidfta.com')) {
-    showToast('Please enter a valid BidFTA URL', 'error');
-    return;
+  } catch (e) {
+    state.apiStatus = 'error';
+    log('Failed to connect to API', 'error');
   }
-  if (platform === 'ebay' && !url.includes('ebay.com')) {
-    showToast('Please enter a valid eBay URL', 'error');
-    return;
-  }
+  updateStatusIndicator();
+}
+
+function updateStatusIndicator() {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (!dot || !text) return;
+
+  dot.className = 'status-dot ' + (state.apiStatus === 'connected' ? '' : state.apiStatus === 'checking' ? 'pending' : 'error');
+  text.textContent = state.apiStatus === 'connected' ? 'Connected' : state.apiStatus === 'checking' ? 'Connecting...' : 'Disconnected';
+}
+
+// Data Loading
+async function loadData() {
+  log('Fetching data...', 'info');
 
   try {
-    const result = await api.post('/auctions/watch', { url, source: platform });
+    const [auctionsRes, alertsRes, statsRes] = await Promise.all([
+      api('/auctions'),
+      api('/alerts?unacknowledged=true'),
+      api('/stats')
+    ]);
 
-    if (result.success) {
-      urlInput.value = '';
+    if (auctionsRes.success) {
+      state.auctions = auctionsRes.data || [];
+      log(`Loaded ${state.auctions.length} auctions`, 'success');
+    }
+    if (alertsRes.success) {
+      state.alerts = alertsRes.data || [];
+      if (state.alerts.length > 0) {
+        log(`${state.alerts.length} active alerts`, 'warning');
+      }
+    }
+    if (statsRes.success) {
+      state.stats = statsRes.data;
+    }
+
+    state.lastUpdate = new Date();
+    render();
+  } catch (error) {
+    log('Failed to load data', 'error');
+  }
+}
+
+// Watch Auction
+async function watchAuction(url) {
+  log(`Submitting: ${url}`, 'info');
+
+  try {
+    const res = await api('/auctions/watch', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    });
+
+    if (res.success) {
+      log(`Added auction: ${res.data.auction_id}`, 'success');
+      log('Navigator agent queued for extraction', 'info');
       await loadData();
-      showToast('Auction added! Agent is analyzing...', 'success');
+      return true;
     } else {
-      showToast(result.error || 'Failed to add auction', 'error');
+      log(`Error: ${res.error}`, 'error');
+      return false;
     }
   } catch (error) {
-    showToast('Connection error', 'error');
+    log(`Failed to add auction`, 'error');
+    return false;
+  }
+}
+
+// Event Handlers
+function handleSubmit(e) {
+  e.preventDefault();
+  const input = document.getElementById('urlInput');
+  const url = input.value.trim();
+  if (url) {
+    watchAuction(url);
+    input.value = '';
   }
 }
 
@@ -400,57 +154,239 @@ function navigate(view) {
   render();
 }
 
-function switchPlatform(platform) {
-  if (PLATFORMS[platform]?.active) {
-    state.currentPlatform = platform;
-    state.currentView = 'dashboard';
-    render();
-    loadData();
+// Components
+function Header() {
+  return `
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">W</div>
+                <span>ShillBid Watchdog</span>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <div id="statusDot" class="status-dot pending"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </header>
+    `;
+}
+
+function Tabs() {
+  return `
+        <div class="platform-tabs">
+            <button class="platform-tab active">BidFTA</button>
+            <button class="platform-tab disabled">eBay <span class="coming-soon">Soon</span></button>
+        </div>
+    `;
+}
+
+function Sidebar() {
+  return `
+        <aside class="sidebar">
+            <nav class="nav-section">
+                <div class="nav-title">Navigation</div>
+                <div class="nav-link ${state.currentView === 'dashboard' ? 'active' : ''}" onclick="navigate('dashboard')">
+                    Dashboard
+                </div>
+                <div class="nav-link ${state.currentView === 'auctions' ? 'active' : ''}" onclick="navigate('auctions')">
+                    Auctions
+                </div>
+                <div class="nav-link ${state.currentView === 'alerts' ? 'active' : ''}" onclick="navigate('alerts')">
+                    Alerts
+                </div>
+            </nav>
+            
+            <div class="nav-section">
+                <div class="nav-title">Statistics</div>
+                <div class="sidebar-stats">
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">Auctions</span>
+                        <span class="sidebar-stat-value">${state.stats.totalAuctions}</span>
+                    </div>
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">Alerts</span>
+                        <span class="sidebar-stat-value" style="color: var(--risk-critical)">${state.stats.activeAlerts}</span>
+                    </div>
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">Suspicious</span>
+                        <span class="sidebar-stat-value" style="color: var(--risk-high)">${state.stats.suspiciousBidders}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-title">Last Updated</div>
+                <div class="text-sm text-muted" style="padding: 0 var(--space-2)">
+                    ${state.lastUpdate ? state.lastUpdate.toLocaleTimeString() : 'Never'}
+                </div>
+            </div>
+        </aside>
+    `;
+}
+
+function Dashboard() {
+  return `
+        <main class="main">
+            <div class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
+            </div>
+            
+            <!-- Watch Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span class="card-title">Watch Auction</span>
+                </div>
+                <div class="card-body">
+                    <form onsubmit="handleSubmit(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">BidFTA Auction URL</label>
+                                <input type="url" id="urlInput" class="form-input" 
+                                    placeholder="https://www.bidfta.com/569416/item-detail/50968437" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Watch</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Stats Grid -->
+            <div class="grid-4">
+                ${StatCard('Auctions', state.stats.totalAuctions)}
+                ${StatCard('Alerts', state.stats.activeAlerts, 'critical')}
+                ${StatCard('Suspicious', state.stats.suspiciousBidders, 'high')}
+                ${StatCard('Analyzed', state.auctions.filter(a => a.last_checked).length)}
+            </div>
+            
+            <!-- Activity Log -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span class="card-title">Activity Log</span>
+                </div>
+                <div class="card-body" style="padding: 0">
+                    <div id="activityLog" class="activity-log">
+                        ${state.logs.slice(0, 10).map(e => `
+                            <div class="log-entry ${e.type}">
+                                <span class="log-time">${e.time}</span>
+                                <span class="log-message">${e.message}</span>
+                            </div>
+                        `).join('') || '<div class="empty-state">No activity yet</div>'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Auctions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Auctions</span>
+                    <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
+                </div>
+                <div class="card-body" style="padding: 0">
+                    ${AuctionsTable(state.auctions.slice(0, 5))}
+                </div>
+            </div>
+        </main>
+    `;
+}
+
+function StatCard(label, value, risk = '') {
+  const color = risk ? `style="color: var(--risk-${risk})"` : '';
+  return `
+        <div class="stat-card">
+            <div class="stat-label">${label}</div>
+            <div class="stat-value" ${color}>${value}</div>
+        </div>
+    `;
+}
+
+function AuctionsTable(auctions) {
+  if (auctions.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon">📭</div><div>No auctions yet</div></div>';
   }
+
+  return `
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Auction ID</th>
+                        <th>Item</th>
+                        <th>Status</th>
+                        <th>Risk</th>
+                        <th>Bids</th>
+                        <th>Last Checked</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${auctions.map(a => `
+                        <tr>
+                            <td><span class="text-mono">${a.auction_id || '-'}</span></td>
+                            <td>
+                                <a href="${a.url}" target="_blank" class="table-link">
+                                    ${a.item_name || 'Pending extraction...'}
+                                </a>
+                            </td>
+                            <td><span class="status-badge ${a.status}">${a.status}</span></td>
+                            <td><span class="risk-badge risk-${(a.risk_level || 'none').toLowerCase()}">${a.risk_level || 'NONE'}</span></td>
+                            <td>${a.bid_count || 0}</td>
+                            <td class="text-muted">${a.last_checked ? formatTime(a.last_checked) : 'Pending'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
-function showAlerts() {
-  navigate('alerts');
+function AuctionsView() {
+  return `
+        <main class="main">
+            <div class="page-header">
+                <h1 class="page-title">Auctions</h1>
+                <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
+            </div>
+            <div class="card">
+                <div class="card-body" style="padding: 0">
+                    ${AuctionsTable(state.auctions)}
+                </div>
+            </div>
+        </main>
+    `;
 }
 
-// ============================================================================
-// Data Loading
-// ============================================================================
-
-async function loadData() {
-  state.loading = true;
-
-  try {
-    // Filter by platform
-    const source = state.currentPlatform;
-
-    const [auctionsRes, alertsRes, statsRes] = await Promise.all([
-      api.get(`/auctions?source=${source}`),
-      api.get(`/alerts?unacknowledged=true&source=${source}`),
-      api.get(`/stats?source=${source}`)
-    ]);
-
-    if (auctionsRes.success) state.auctions = auctionsRes.data || [];
-    if (alertsRes.success) state.alerts = alertsRes.data || [];
-    if (statsRes.success) state.stats = statsRes.data || state.stats;
-
-    const alertCountEl = document.getElementById('alertCount');
-    if (alertCountEl) {
-      alertCountEl.textContent = state.stats.activeAlerts;
+function AlertsView() {
+  return `
+        <main class="main">
+            <div class="page-header">
+                <h1 class="page-title">Alerts</h1>
+                <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
+            </div>
+            <div class="card">
+                <div class="card-body" style="padding: 0">
+                    ${state.alerts.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">✓</div><div>No active alerts</div></div>'
+      : state.alerts.map(a => `
+                            <div class="alert-item">
+                                <div class="alert-indicator ${(a.risk_level || 'low').toLowerCase()}"></div>
+                                <div class="alert-content">
+                                    <div class="alert-title">${a.item_name || a.auction_code || 'Alert'}</div>
+                                    <div class="alert-meta">
+                                        ${a.summary || 'Suspicious activity detected'} • ${formatTime(a.created_at)}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')
     }
-  } catch (error) {
-    console.error('Failed to load data:', error);
-  }
-
-  state.loading = false;
-  render();
+                </div>
+            </div>
+        </main>
+    `;
 }
-
-// ============================================================================
-// Utilities
-// ============================================================================
 
 function formatTime(isoString) {
+  if (!isoString) return 'Unknown';
   const date = new Date(isoString);
   const now = new Date();
   const diff = now - date;
@@ -461,70 +397,41 @@ function formatTime(isoString) {
   return date.toLocaleDateString();
 }
 
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 24px;
-    background: ${type === 'error' ? 'var(--risk-critical)' : 'var(--accent)'};
-    color: white;
-    border-radius: var(--radius-md);
-    z-index: 9999;
-    animation: slideIn 0.3s ease;
-  `;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
-
-// ============================================================================
 // Render
-// ============================================================================
-
 function render() {
   const root = document.getElementById('root');
 
   let mainContent;
-
-  // Check if platform is active
-  if (!PLATFORMS[state.currentPlatform]?.active) {
-    mainContent = EbayPlaceholder();
-  } else {
-    switch (state.currentView) {
-      case 'auctions':
-        mainContent = AuctionsView();
-        break;
-      case 'alerts':
-        mainContent = AlertsView();
-        break;
-      default:
-        mainContent = Dashboard();
-    }
+  switch (state.currentView) {
+    case 'auctions': mainContent = AuctionsView(); break;
+    case 'alerts': mainContent = AlertsView(); break;
+    default: mainContent = Dashboard();
   }
 
   root.innerHTML = `
-    <div class="app">
-      ${Header()}
-      ${PlatformTabs()}
-      <div class="app-content">
-        ${Sidebar()}
-        ${mainContent}
-      </div>
-    </div>
-  `;
+        <div class="app">
+            ${Header()}
+            ${Tabs()}
+            <div class="app-content">
+                ${Sidebar()}
+                ${mainContent}
+            </div>
+        </div>
+    `;
+
+  updateStatusIndicator();
 }
 
-// ============================================================================
 // Initialize
-// ============================================================================
-
 document.addEventListener('DOMContentLoaded', () => {
+  log('Initializing ShillBid Watchdog...', 'info');
   render();
+  checkHealth();
   loadData();
 
   // Auto-refresh every 30 seconds
-  setInterval(loadData, 30000);
+  setInterval(() => {
+    log('Auto-refreshing...', 'info');
+    loadData();
+  }, 30000);
 });
