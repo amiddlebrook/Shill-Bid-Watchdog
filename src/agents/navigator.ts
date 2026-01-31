@@ -68,6 +68,33 @@ export async function navigateBidFTA(
         // Wait for body to ensure page loaded
         await page.waitForSelector('body', { timeout: 10000 });
 
+        // Anti-Popup: Close newsletter or overlay if present
+        await page.evaluate(() => {
+            const closeButtons = [
+                'button:contains("No Thanks")',
+                'button:contains("Close")',
+                'a:contains("No Thanks")',
+                '.modal-close',
+                '.close-button',
+                'div:contains("No Thanks")'
+            ];
+            // Simple text-based search as fallback
+            const labels = ["No Thanks", "No thanks", "Close", "✕"];
+            labels.forEach(l => {
+                const xpath = `//*[contains(text(), '${l}')]`;
+                const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
+                let node = result.iterateNext();
+                while (node) {
+                    if (node instanceof HTMLElement && typeof node.click === 'function') {
+                        node.click();
+                    }
+                    node = result.iterateNext();
+                }
+            });
+        }).catch(() => null);
+
+        await delay(1000);
+
         // Check for blocking/captcha
         const isBlocked = await page.evaluate(() => {
             const bodyText = document.body.innerText;
