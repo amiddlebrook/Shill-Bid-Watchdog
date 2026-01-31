@@ -121,10 +121,11 @@ app.post('/api/auctions/watch', async (c) => {
 app.delete('/api/auctions/:id', async (c) => {
     try {
         const id = c.req.param('id');
-        await c.env.DB.prepare('DELETE FROM auctions WHERE id = ?').bind(id).run();
-        // Also cleanup bids and alerts
-        await c.env.DB.prepare('DELETE FROM bids WHERE auction_id = ?').bind(id).run();
+        // Delete children first (FK constraints)
         await c.env.DB.prepare('DELETE FROM alerts WHERE auction_id = ?').bind(id).run();
+        await c.env.DB.prepare('DELETE FROM bids WHERE auction_id = ?').bind(id).run();
+        // Then delete parent
+        await c.env.DB.prepare('DELETE FROM auctions WHERE id = ?').bind(id).run();
 
         return c.json({ success: true, deleted: true });
     } catch (error) {
