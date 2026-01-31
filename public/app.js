@@ -716,7 +716,7 @@ function BiddersView() {
 
 function LogsView() {
   return `
-  < main class="main" >
+        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Activity Log</h1>
                 <button class="btn btn-secondary" onclick="state.logs = []; render()">Clear</button>
@@ -729,8 +729,8 @@ function LogsView() {
                     </div>
                 </div>
             </div>
-        </main >
-  `;
+        </main>
+    `;
 }
 
 // ============================================================================
@@ -738,19 +738,19 @@ function LogsView() {
 // ============================================================================
 
 function StatCard(label, value, risk = '') {
-  const color = risk ? `style = "color: var(--risk-${risk})"` : '';
+  const color = risk ? `style="color: var(--risk-${risk})"` : '';
   return `
-  < div class="stat-card" >
+        <div class="stat-card">
             <div class="stat-label">${label}</div>
             <div class="stat-value" ${color}>${value}</div>
-        </div >
-  `;
+        </div>
+    `;
 }
 
 async function deleteAuction(id) {
   if (!confirm('Are you sure you want to delete this auction?')) return;
   try {
-    const res = await api(`/ auctions / ${id} `, { method: 'DELETE' });
+    const res = await api(`/auctions/${id}`, { method: 'DELETE' });
     if (res.success) {
       log('Auction deleted', 'success');
       if (state.currentView === 'auction-detail') navigate('auctions');
@@ -767,21 +767,21 @@ function AuctionsTable(auctions, showActions = false) {
   }
 
   return `
-  < div class="table-container" >
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Auction ID</th>
-          <th>Item</th>
-          <th>Status</th>
-          <th>Risk</th>
-          <th>Bids</th>
-          <th>Last Checked</th>
-          ${showActions ? '<th>Actions</th>' : ''}
-        </tr>
-      </thead>
-      <tbody>
-        ${auctions.map(a => `
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Auction ID</th>
+                        <th>Item</th>
+                        <th>Status</th>
+                        <th>Risk</th>
+                        <th>Bids</th>
+                        <th>Last Checked</th>
+                        ${showActions ? '<th>Actions</th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${auctions.map(a => `
                         <tr>
                             <td>
                                 <span class="text-mono table-link" onclick="viewAuction(${a.id})" style="cursor:pointer">
@@ -806,15 +806,15 @@ function AuctionsTable(auctions, showActions = false) {
                             ` : ''}
                         </tr>
                     `).join('')}
-      </tbody>
-    </table>
-        </div >
-  `;
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
 function AlertItem(alert) {
   return `
-  < div class="alert-item" >
+        <div class="alert-item">
             <div class="alert-indicator ${(alert.risk_level || 'low').toLowerCase()}"></div>
             <div class="alert-content">
                 <div class="alert-title">${alert.item_name || alert.auction_code || 'Alert'}</div>
@@ -823,8 +823,8 @@ function AlertItem(alert) {
                 </div>
             </div>
             <button class="btn btn-sm btn-secondary" onclick="acknowledgeAlert(${alert.id})">Dismiss</button>
-        </div >
-  `;
+        </div>
+    `;
 }
 
 function renderLogs(count) {
@@ -833,11 +833,11 @@ function renderLogs(count) {
     return '<div class="empty-state">No activity yet</div>';
   }
   return logs.map(e => `
-  < div class="log-entry ${e.type}" >
+        <div class="log-entry ${e.type}">
             <span class="log-time">${e.time}</span>
             <span class="log-message">${e.message}</span>
-        </div >
-  `).join('');
+        </div>
+    `).join('');
 }
 
 function formatTime(isoString) {
@@ -870,15 +870,15 @@ function render() {
   }
 
   root.innerHTML = `
-  < div class="app" >
-    ${Header()}
+        <div class="app">
+            ${Header()}
             ${Tabs()}
-<div class="app-content">
-  ${Sidebar()}
-  ${mainContent}
-</div>
-        </div >
-  `;
+            <div class="app-content">
+                ${Sidebar()}
+                ${mainContent}
+            </div>
+        </div>
+    `;
 
   updateStatusIndicator();
 }
