@@ -349,27 +349,55 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
     try {
         // BidFTA shows bid history when you click on the current bid amount
         const clickTargets = [
+            '#current-bid',
+            '.current-bid',
             '[class*="current-bid"]',
             '[class*="bid-amount"]',
+            '.winning-bid',
             'button:has-text("Bid History")',
             'a:has-text("Bid History")',
             '.price-section',
             '[data-testid="bid-history"]'
         ];
 
+        let clicked = false;
+
+        // 1. Try specific selectors
         for (const selector of clickTargets) {
             const element = await page.$(selector);
             if (element) {
                 await element.click();
-                await delay(1000 + Math.random() * 500);
+                clicked = true;
+                await delay(500); // Small delay between attempts
 
-                // Check if popup appeared
-                const popup = await page.$('[class*="popup"], [class*="modal"], [class*="dropdown"]');
-                if (popup) {
-                    return;
-                }
+                // Check if popup/table appeared immediately
+                if (await page.$('table')) return;
             }
         }
+
+        // 2. Try text-based click (User indicated "Current Bid" is the trigger)
+        if (!clicked || !(await page.$('table'))) {
+            await page.evaluate(() => {
+                const elements = Array.from(document.querySelectorAll('div, span, b, strong, label'));
+                // Find element containing "Current Bid" that isn't just a container
+                const target = elements.find(el =>
+                    el.innerText &&
+                    el.innerText.toLowerCase().includes('current bid') &&
+                    el.children.length === 0 // Leaf node or close to it
+                );
+                if (target) {
+                    (target as HTMLElement).click();
+                } else {
+                    // Try "High Bidder"
+                    const target2 = elements.find(el => el.innerText && el.innerText.includes('High Bidder'));
+                    if (target2) (target2 as HTMLElement).click();
+                }
+            });
+        }
+
+        // Wait for popup animation/load
+        await delay(2000);
+
     } catch (error) {
         console.error('Failed to open bid history popup:', error);
     }
