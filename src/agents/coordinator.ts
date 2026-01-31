@@ -40,9 +40,30 @@ export class CoordinatorAgent implements DurableObject {
                 return this.handleStatus();
             case '/clear':
                 return this.handleClear();
+            case '/cancel-tasks':
+                return this.handleCancelTasks(request);
             default:
                 return new Response('Not Found', { status: 404 });
         }
+    }
+
+    private async handleCancelTasks(request: Request): Promise<Response> {
+        const url = new URL(request.url);
+        const auctionId = parseInt(url.searchParams.get('auctionId') || '0');
+        if (!auctionId) return Response.json({ success: false, error: 'Invalid ID' });
+
+        const before = this.taskQueue.pending.length;
+        this.taskQueue.pending = this.taskQueue.pending.filter(t => t.auctionId !== auctionId);
+
+        // Also remove from processing if possible (can't stop execution, but remove from list)
+        // this.taskQueue.processing = this.taskQueue.processing.filter(t => t.auctionId !== auctionId);
+
+        await this.saveState();
+
+        // Remove from DB tasks for cleanliness
+        await this.env.DB.prepare('DELETE FROM agent_tasks WHERE auction_id = ? AND status = "pending"').bind(auctionId).run();
+
+        return Response.json({ success: true, cancelled: before - this.taskQueue.pending.length });
     }
 
     private async handleQueueTask(request: Request): Promise<Response> {
