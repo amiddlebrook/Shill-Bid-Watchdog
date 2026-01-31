@@ -427,158 +427,177 @@ async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResu
 
 /**
  * Click on current bid area to open the bid history popup
- * BidFTA shows bid history in a modal/popup when clicking the bid count or "Current Bid" area
+ * BidFTA shows bid history in a dropdown when clicking the icon next to "CURRENT BID"
+ *
+ * From BidFTA page structure:
+ * - "CURRENT BID $XX.XX" with a people icon (clickable)
+ * - Clicking opens dropdown with table: "Bidder ID | Bid | Date & Time"
  */
 async function openBidHistoryPopup(page: Page): Promise<void> {
     try {
-        console.log('[Navigator] Attempting to open bid history...');
+        console.log('[Navigator] Attempting to open BidFTA bid history dropdown...');
 
-        // First, log what elements we can find on the page for debugging
-        const pageInfo = await page.evaluate(() => {
-            const allText = document.body.innerText;
-            const bidsMatch = allText.match(/(\d+)\s*Bids?/gi);
-            const currentBidMatch = allText.match(/Current\s*Bid[:\s]*\$?([\d,.]+)/i);
+        // Debug: Log what we can find on the page
+        const pageDebug = await page.evaluate(() => {
+            const bodyText = document.body.innerText;
             return {
-                foundBidsText: bidsMatch || [],
-                currentBidText: currentBidMatch?.[0] || null,
-                hasTable: !!document.querySelector('table'),
-                tableCount: document.querySelectorAll('table').length
+                hasCurrentBid: bodyText.includes('CURRENT BID') || bodyText.includes('Current Bid'),
+                hasBidderID: bodyText.includes('Bidder ID'),
+                pageTextSnippet: bodyText.substring(0, 1000)
             };
         });
-        console.log('[Navigator] Page info:', JSON.stringify(pageInfo));
+        console.log('[Navigator] Page debug:', JSON.stringify({
+            hasCurrentBid: pageDebug.hasCurrentBid,
+            hasBidderID: pageDebug.hasBidderID
+        }));
 
-        let clickMethod = await page.evaluate(() => {
-            const elements = Array.from(document.querySelectorAll('button, a, div, span, p, h4, h3, h2, li, td'));
+        // Try to click the bid history trigger
+        const clicked = await page.evaluate(() => {
+            // BidFTA-specific: Look for the "CURRENT BID" area with the clickable icon
+            // The structure is typically: [icon] CURRENT BID $XX.XX
 
-            // 1. Search for "X Bids" link specifically (highest priority)
-            // Also try to find clickable elements with bid count
-            const bidsPatterns = [
-                /^\d+\s*Bids?$/i,           // "5 Bids"
-                /^Bids?\s*\(\d+\)$/i,        // "Bids (5)"
-                /^Bid\s*History$/i,          // "Bid History"
-                /^View\s*Bids?$/i,           // "View Bids"
-                /^\d+\s*Bid\s*History$/i     // "5 Bid History"
-            ];
+            // Strategy 1: Find element containing "CURRENT BID" and look for clickable siblings/children
+            const allElements = Array.from(document.querySelectorAll('*'));
 
-            for (const pattern of bidsPatterns) {
-                const bidsLink = elements.find(el => {
-                    const text = (el as HTMLElement).innerText?.trim() || '';
-                    return pattern.test(text);
-                });
+            // Look for elements that contain "CURRENT BID" text
+            for (const el of allElements) {
+                const text = (el as HTMLElement).innerText || '';
+                const directText = el.childNodes[0]?.textContent || '';
 
-                if (bidsLink) {
-                    console.log(`[Browser] Found bids element: "${(bidsLink as HTMLElement).innerText}"`);
-                    (bidsLink as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
-                    (bidsLink as HTMLElement).click();
-                    return "bids_link";
+                // Match "CURRENT BID" (case insensitive)
+                if (text.toLowerCase().includes('current bid') && text.includes('$')) {
+                    console.log('[Browser] Found CURRENT BID area:', text.substring(0, 50));
+
+                    // Look for clickable elements within this area
+                    const clickables = el.querySelectorAll('a, button, [role="button"], svg, i, span[class*="icon"], [class*="click"], [class*="bid"]');
+
+                    for (const clickable of clickables) {
+                        // Skip if it's a login button
+                        const clickText = (clickable as HTMLElement).innerText?.toLowerCase() || '';
+                        if (clickText.includes('log in') || clickText.includes('login')) continue;
+
+                        console.log('[Browser] Clicking element in CURRENT BID area');
+                        (clickable as HTMLElement).click();
+                        return 'current_bid_child';
+                    }
+
+                    // If no specific clickable found, try clicking the container itself
+                    (el as HTMLElement).click();
+                    return 'current_bid_container';
                 }
             }
 
-            // 2. Search for clickable elements containing bid-related text
-            const bidLabels = ["Bid History", "Current Bid", "High Bid", "Winning Bid", "View Bids", "Show Bids"];
-            for (const label of bidLabels) {
-                const target = elements.find(el => {
-                    const text = (el as HTMLElement).innerText?.trim() || '';
-                    const tagName = el.tagName.toLowerCase();
-                    // Prefer links and buttons
-                    const isClickable = tagName === 'a' || tagName === 'button' ||
-                                       el.getAttribute('role') === 'button' ||
-                                       (el as HTMLElement).style.cursor === 'pointer' ||
-                                       (el as HTMLElement).onclick !== null;
-                    return text.toLowerCase().includes(label.toLowerCase()) &&
-                           !text.toLowerCase().includes('increment') &&
-                           text.length < 100; // Avoid clicking huge text blocks
-                });
-                if (target) {
-                    console.log(`[Browser] Clicking label trigger: "${(target as HTMLElement).innerText.substring(0, 50)}"`);
-                    (target as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
-                    (target as HTMLElement).click();
-                    return "label_click";
+            // Strategy 2: Look for SVG icons or icon elements near bid text
+            const icons = document.querySelectorAll('svg, i[class*="icon"], span[class*="icon"], [class*="bid-icon"], [class*="bidder"]');
+            for (const icon of icons) {
+                const parent = icon.parentElement;
+                const parentText = parent?.innerText || '';
+                if (parentText.toLowerCase().includes('bid') || parentText.includes('$')) {
+                    console.log('[Browser] Clicking bid icon');
+                    (icon as HTMLElement).click();
+                    return 'bid_icon';
                 }
             }
 
-            // 3. Try clicking links/buttons near bid-related text
-            const allLinks = Array.from(document.querySelectorAll('a, button, [role="button"], [onclick]'));
-            for (const link of allLinks) {
-                const text = (link as HTMLElement).innerText?.toLowerCase() || '';
-                const href = link.getAttribute('href') || '';
-                if (text.includes('bid') || href.includes('bid')) {
-                    console.log(`[Browser] Clicking bid-related link: "${(link as HTMLElement).innerText?.substring(0, 30)}"`);
-                    (link as HTMLElement).click();
-                    return "bid_link";
-                }
+            // Strategy 3: Look for any element with bid-related classes
+            const bidElements = document.querySelectorAll('[class*="bid-history"], [class*="bidHistory"], [class*="bid-count"], [class*="bidCount"], [class*="current-bid"], [class*="currentBid"]');
+            for (const el of bidElements) {
+                console.log('[Browser] Clicking bid-class element');
+                (el as HTMLElement).click();
+                return 'bid_class';
             }
 
-            // 4. Try clicking the price area (often triggers bid popup on auction sites)
-            const priceSelectors = [
-                '[class*="price"]', '[class*="bid"]', '[class*="current"]',
-                '[data-testid*="bid"]', '[data-testid*="price"]'
-            ];
-            for (const selector of priceSelectors) {
-                const priceEl = document.querySelector(selector);
-                if (priceEl) {
-                    console.log(`[Browser] Clicking price area with selector: ${selector}`);
-                    (priceEl as HTMLElement).click();
-                    return "price_selector";
-                }
-            }
-
-            // 5. Last resort: Click anything with a $ sign (likely the price area)
-            const priceEl = elements.find(el => {
+            // Strategy 4: Find elements with dollar amounts and click nearby clickable elements
+            const dollarElements = Array.from(document.querySelectorAll('*')).filter(el => {
                 const text = (el as HTMLElement).innerText?.trim() || '';
-                return text.includes('$') && text.length < 20 && el.children.length === 0;
+                return /^\$\d+\.\d{2}$/.test(text);
             });
-            if (priceEl) {
-                console.log(`[Browser] Clicking price area: ${(priceEl as HTMLElement).innerText}`);
-                (priceEl as HTMLElement).click();
-                return "price_fallback";
+
+            for (const dollarEl of dollarElements) {
+                const parent = dollarEl.parentElement;
+                if (!parent) continue;
+
+                // Look for clickable siblings
+                const siblings = Array.from(parent.children);
+                for (const sibling of siblings) {
+                    if (sibling === dollarEl) continue;
+                    const tag = sibling.tagName.toLowerCase();
+                    if (tag === 'a' || tag === 'button' || sibling.querySelector('svg, i')) {
+                        console.log('[Browser] Clicking sibling of dollar amount');
+                        (sibling as HTMLElement).click();
+                        return 'dollar_sibling';
+                    }
+                }
+            }
+
+            // Strategy 5: Click on any text matching price pattern that might be a link
+            const priceLinks = document.querySelectorAll('a, button, [role="button"]');
+            for (const link of priceLinks) {
+                const text = (link as HTMLElement).innerText || '';
+                if (/\$\d+\.\d{2}/.test(text) && text.length < 50) {
+                    console.log('[Browser] Clicking price link:', text);
+                    (link as HTMLElement).click();
+                    return 'price_link';
+                }
             }
 
             return null;
         });
 
-        if (clickMethod) {
-            console.log(`[Navigator] Trigger [${clickMethod}] clicked, waiting for modal content...`);
-            // Wait for modal/popup to appear
-            await delay(1500);
+        if (clicked) {
+            console.log(`[Navigator] Clicked using strategy: ${clicked}`);
+        } else {
+            console.log('[Navigator] Could not find bid history trigger');
+        }
 
-            // Wait for ANY table to appear (bid history is usually in a table)
-            try {
-                await page.waitForSelector('table, .modal, [role="dialog"], .popup, .bid-history', { timeout: 5000 });
+        // Wait for the dropdown/popup to appear
+        await delay(2000);
 
-                // Check if it's the right table/modal
-                const modalInfo = await page.evaluate(() => {
-                    const tables = document.querySelectorAll('table');
-                    const modals = document.querySelectorAll('.modal, [role="dialog"], .popup');
-                    let foundBidTable = false;
+        // Check if bid table appeared
+        const tableAppeared = await page.evaluate(() => {
+            const tables = document.querySelectorAll('table');
+            for (const table of tables) {
+                const text = (table as HTMLElement).innerText.toLowerCase();
+                if (text.includes('bidder') && text.includes('bid') && text.includes('$')) {
+                    return true;
+                }
+            }
+            // Also check for dropdown/popup content
+            const popups = document.querySelectorAll('[class*="dropdown"], [class*="popup"], [class*="modal"], [role="listbox"], [role="menu"]');
+            for (const popup of popups) {
+                const text = (popup as HTMLElement).innerText;
+                if (/\d{6,}/.test(text) && text.includes('$')) {
+                    return true;
+                }
+            }
+            return false;
+        });
 
-                    for (const table of tables) {
-                        const text = (table as HTMLElement).innerText.toLowerCase();
-                        if (text.includes('bidder') || text.includes('bid amount') ||
-                            (text.includes('$') && /\d{5,}/.test(text))) {
-                            foundBidTable = true;
+        console.log(`[Navigator] Bid table/popup appeared: ${tableAppeared}`);
+
+        if (!tableAppeared) {
+            // Try a second click strategy - sometimes need to scroll first
+            console.log('[Navigator] Table not found, trying alternative click...');
+
+            await page.evaluate(() => {
+                // Try clicking any element that looks like it shows bid count
+                const allText = document.body.innerText;
+                const bidCountMatch = allText.match(/(\d+)\s*(?:bid|Bid)/);
+
+                if (bidCountMatch) {
+                    const elements = Array.from(document.querySelectorAll('*'));
+                    for (const el of elements) {
+                        const text = (el as HTMLElement).innerText?.trim() || '';
+                        if (text === bidCountMatch[0] || text === `${bidCountMatch[1]} Bids` || text === `${bidCountMatch[1]} bids`) {
+                            console.log('[Browser] Clicking bid count:', text);
+                            (el as HTMLElement).click();
                             break;
                         }
                     }
-
-                    return {
-                        tableCount: tables.length,
-                        modalCount: modals.length,
-                        foundBidTable,
-                        visibleModals: modals.length
-                    };
-                });
-                console.log('[Navigator] Modal info after click:', JSON.stringify(modalInfo));
-
-                if (!modalInfo.foundBidTable && modalInfo.tableCount > 0) {
-                    console.log('[Navigator] Found table but not bid history. Checking all tables...');
                 }
+            });
 
-            } catch (e) {
-                console.log('[Navigator] Modal/table did not appear within 5s, checking if bids are inline...');
-            }
-        } else {
-            console.log('[Navigator] No bid history trigger found on page');
+            await delay(1500);
         }
 
     } catch (error) {
@@ -587,167 +606,153 @@ async function openBidHistoryPopup(page: Page): Promise<void> {
 }
 
 /**
- * Extract bid history from the popup
- * Format from screenshot: "Bidder ID | Bid | Date & Time"
- * Example: "1366231 $26.01 01/30/2026 08:53 PM ET"
- */
-/**
- * Extract bid history from the page (popup, modal, or embedded)
+ * Extract bid history from BidFTA dropdown/popup
+ *
+ * BidFTA Table Format:
+ * Headers: "Bidder ID" | "Bid" | "Date & Time"
+ * Data:    "1331515"   | "$39.00" | "01/31/2026 10:50 AM ET"
  */
 async function extractBidHistoryFromPopup(
     page: Page
 ): Promise<Array<{ bidderId: string; amount: number; bidTime?: string }>> {
     try {
-        // Wait for potential bid table or modal
-        await page.waitForSelector('table, .modal, [role="dialog"], .bid-history, .bids-list', { timeout: 3000 }).catch(() => null);
+        // Wait for bid table or dropdown to appear
+        await page.waitForSelector('table', { timeout: 3000 }).catch(() => null);
 
         const bids = await page.evaluate(() => {
             const results: Array<{ bidderId: string; amount: number; bidTime: string }> = [];
 
-            // METHOD 1: Look for bid tables with headers
-            const tables = Array.from(document.querySelectorAll('table'));
-            console.log(`[Browser] Found ${tables.length} tables`);
+            // Debug: Log all tables found
+            const allTables = document.querySelectorAll('table');
+            console.log(`[Browser] Found ${allTables.length} total tables on page`);
 
-            for (const table of tables) {
-                const tableText = (table as HTMLElement).innerText.toLowerCase();
+            // METHOD 1: BidFTA-specific table extraction
+            // Look for table with "Bidder ID" header
+            for (const table of allTables) {
+                const tableText = (table as HTMLElement).innerText;
+                const tableTextLower = tableText.toLowerCase();
 
-                // Check if this table contains bid-related content
-                const isBidTable = tableText.includes('bidder') ||
-                                  tableText.includes('bid amount') ||
-                                  tableText.includes('high bid') ||
-                                  (tableText.includes('$') && /\d{5,}/.test(tableText));
+                // BidFTA bid table has "Bidder ID" column
+                const isBidFTATable = tableTextLower.includes('bidder id') ||
+                                      tableTextLower.includes('bidder') && tableTextLower.includes('bid') && tableText.includes('$');
 
-                if (!isBidTable) continue;
+                if (!isBidFTATable) {
+                    continue;
+                }
 
-                console.log(`[Browser] Found potential bid table`);
+                console.log('[Browser] Found BidFTA bid table:', tableText.substring(0, 100));
 
-                const rows = Array.from(table.querySelectorAll('tr'));
+                // Get all rows (including header)
+                const rows = table.querySelectorAll('tr');
+                let isHeader = true;
+
                 for (const row of rows) {
-                    const cells = Array.from(row.querySelectorAll('td, th'));
+                    // Get cells - could be th or td
+                    const cells = row.querySelectorAll('td, th');
                     if (cells.length < 2) continue;
 
-                    const rowText = (row as HTMLElement).innerText.toLowerCase();
-                    // Skip header rows
-                    if (rowText.includes('bidder id') || rowText.includes('bid amount') ||
-                        rowText.includes('date') || rowText.includes('time') ||
-                        (rowText.includes('bidder') && rowText.includes('amount'))) {
+                    const rowText = (row as HTMLElement).innerText;
+                    const rowTextLower = rowText.toLowerCase();
+
+                    // Skip header row
+                    if (isHeader && (rowTextLower.includes('bidder id') || rowTextLower.includes('date & time'))) {
+                        isHeader = false;
                         continue;
                     }
 
-                    // Extract bid data from cells
-                    let bidderId = '';
-                    let amount = 0;
-                    let bidTime = '';
+                    // BidFTA format: Cell 0 = Bidder ID, Cell 1 = Amount, Cell 2 = Date/Time
+                    const cell0 = (cells[0] as HTMLElement).innerText.trim();
+                    const cell1 = (cells[1] as HTMLElement).innerText.trim();
+                    const cell2 = cells[2] ? (cells[2] as HTMLElement).innerText.trim() : '';
 
-                    cells.forEach((cell, idx) => {
-                        const text = (cell as HTMLElement).innerText.trim();
+                    // Extract bidder ID (6-7 digit number)
+                    const bidderIdMatch = cell0.match(/(\d{6,7})/);
+                    if (!bidderIdMatch) continue;
 
-                        // Bidder ID: Usually 5+ digits, no $ sign
-                        if (/^\d{5,}$/.test(text.replace(/[^\d]/g, '')) && !text.includes('$')) {
-                            const idMatch = text.match(/(\d{5,})/);
-                            if (idMatch) bidderId = idMatch[1];
-                        }
+                    // Extract amount (dollar value)
+                    const amountMatch = cell1.match(/\$?([\d,]+\.?\d*)/);
+                    if (!amountMatch) continue;
 
-                        // Amount: Has $ sign
-                        if (text.includes('$')) {
-                            const amountMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
-                            if (amountMatch) {
-                                amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-                            }
-                        }
-
-                        // Time: Contains date/time patterns
-                        if (text.includes('/') || text.includes(':') ||
-                            text.toLowerCase().includes('am') || text.toLowerCase().includes('pm') ||
-                            text.toLowerCase().includes('ago')) {
-                            bidTime = text;
-                        }
-                    });
-
-                    // Positional fallback if heuristics fail
-                    if (!bidderId && cells.length > 0) {
-                        const firstCellText = (cells[0] as HTMLElement).innerText.trim();
-                        const idMatch = firstCellText.match(/(\d{5,})/);
-                        if (idMatch) bidderId = idMatch[1];
-                    }
-
-                    if (!amount && cells.length > 1) {
-                        const secondCellText = (cells[1] as HTMLElement).innerText;
-                        const amountMatch = secondCellText.match(/([\d,]+\.?\d*)/);
-                        if (amountMatch) {
-                            amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-                        }
-                    }
+                    const bidderId = bidderIdMatch[1];
+                    const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
 
                     if (bidderId && amount > 0) {
-                        results.push({ bidderId, amount, bidTime: bidTime || new Date().toISOString() });
+                        results.push({
+                            bidderId,
+                            amount,
+                            bidTime: cell2 || new Date().toISOString()
+                        });
+                        console.log(`[Browser] Extracted bid: ${bidderId} $${amount} ${cell2}`);
                     }
                 }
 
-                // If we found bids in this table, stop looking
-                if (results.length > 0) break;
+                // If we found bids, stop looking
+                if (results.length > 0) {
+                    console.log(`[Browser] Successfully extracted ${results.length} bids from table`);
+                    break;
+                }
             }
 
-            // METHOD 2: Look for bid lists (non-table format)
+            // METHOD 2: Dropdown/popup text parsing (if table method failed)
             if (results.length === 0) {
-                console.log('[Browser] No table bids found, trying list format...');
+                console.log('[Browser] Table method failed, trying dropdown text parsing...');
 
-                // Look for list items or divs that contain bid info
-                const bidContainers = document.querySelectorAll('.bid-item, .bid-row, .bid, [class*="bid-"], li');
+                // Look for dropdown or popup content
+                const dropdownContent = document.querySelector('[class*="dropdown"], [class*="popup"], [class*="modal"], [role="listbox"], [role="menu"]');
+                const searchArea = dropdownContent || document.body;
+                const fullText = (searchArea as HTMLElement).innerText;
 
-                for (const container of bidContainers) {
-                    const text = (container as HTMLElement).innerText;
+                // BidFTA bid line format: "1331515 $39.00 01/31/2026 10:50 AM ET"
+                // Pattern: 6-7 digit ID, dollar amount, date/time
+                const bidLinePattern = /(\d{6,7})\s+\$?([\d,]+\.?\d{2})\s+([\d\/]+\s+[\d:]+\s*(?:AM|PM)\s*(?:ET|EST|CT|CST|PT|PST)?)/gi;
 
-                    // Look for pattern like "1234567 $25.00" or "Bidder: 1234567 Amount: $25.00"
-                    const idMatch = text.match(/(\d{5,})/);
-                    const amountMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
+                let match;
+                while ((match = bidLinePattern.exec(fullText)) !== null) {
+                    results.push({
+                        bidderId: match[1],
+                        amount: parseFloat(match[2].replace(/,/g, '')),
+                        bidTime: match[3].trim()
+                    });
+                    console.log(`[Browser] Extracted from text: ${match[1]} $${match[2]} ${match[3]}`);
+                }
+            }
+
+            // METHOD 3: Line-by-line parsing
+            if (results.length === 0) {
+                console.log('[Browser] Trying line-by-line parsing...');
+
+                const lines = document.body.innerText.split('\n');
+                for (const line of lines) {
+                    // Look for lines that have: ID (6+ digits), dollar amount, and possibly a date
+                    const idMatch = line.match(/\b(\d{6,7})\b/);
+                    const amountMatch = line.match(/\$([\d,]+\.?\d{2})/);
 
                     if (idMatch && amountMatch) {
+                        // Extract time if present
+                        const timeMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s+[\d:]+\s*(?:AM|PM)?(?:\s*[A-Z]{2,3})?)/i);
+
                         results.push({
                             bidderId: idMatch[1],
                             amount: parseFloat(amountMatch[1].replace(/,/g, '')),
-                            bidTime: new Date().toISOString()
+                            bidTime: timeMatch ? timeMatch[1] : new Date().toISOString()
                         });
+                        console.log(`[Browser] Extracted from line: ${idMatch[1]} $${amountMatch[1]}`);
                     }
                 }
             }
 
-            // METHOD 3: Full text parsing as last resort
-            if (results.length === 0) {
-                console.log('[Browser] Trying full text parsing...');
-
-                // Get text from modal or main content
-                const modalContent = document.querySelector('.modal-body, .modal-content, [role="dialog"], .popup-content');
-                const searchArea = modalContent || document.body;
-                const fullText = (searchArea as HTMLElement).innerText;
-
-                // Look for bid patterns in text
-                // Pattern: "BidderID Amount Time" or "BidderID $XX.XX MM/DD/YYYY"
-                const bidPattern = /(\d{6,})\s+\$?([\d,]+\.?\d*)\s+([\d\/]+\s+[\d:]+\s*[AP]?M?\s*[A-Z]*)?/gi;
-                let match;
-
-                while ((match = bidPattern.exec(fullText)) !== null) {
-                    const bidderId = match[1];
-                    const amount = parseFloat(match[2].replace(/,/g, ''));
-                    const bidTime = match[3]?.trim() || new Date().toISOString();
-
-                    if (bidderId && amount > 0) {
-                        results.push({ bidderId, amount, bidTime });
-                    }
-                }
-            }
-
-            console.log(`[Browser] Extracted ${results.length} bids`);
+            console.log(`[Browser] Total bids extracted: ${results.length}`);
             return results;
         });
 
         console.log(`[Navigator] Extracted ${bids.length} bids from popup/page`);
         return bids;
     } catch (error) {
-        console.error('Failed to extract bid history:', error);
+        console.error('[Navigator] Failed to extract bid history:', error);
         return [];
     }
 }
+
 
 /**
  * Extract bids from API response data
