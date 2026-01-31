@@ -53,9 +53,15 @@ export async function navigateBidFTA(
         // Wait for body to ensure page loaded
         await page.waitForSelector('body', { timeout: 10000 });
 
-        // Check for blocking/captcha
-        const pageContent = await page.content();
-        if (pageContent.includes('Access Denied') || pageContent.includes('security check') || pageContent.includes('Cloudflare')) {
+        // Check for blocking/captcha (lighter check)
+        const isBlocked = await page.evaluate(() => {
+            const bodyText = document.body.innerText;
+            return bodyText.includes('Access Denied') ||
+                bodyText.includes('security check') ||
+                bodyText.includes('Cloudflare');
+        });
+
+        if (isBlocked) {
             console.warn('[Navigator] Potential blocking validation detected');
             return {
                 success: false,
