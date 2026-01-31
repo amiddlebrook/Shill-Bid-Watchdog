@@ -316,73 +316,81 @@ async function extractBidHistoryFromPopup(
     page: puppeteer.Page
 ): Promise<Array<{ bidderId: string; amount: number; bidTime?: string }>> {
     try {
+        // Wait for potential bid table
+        await page.waitForSelector('table', { timeout: 3000 }).catch(() => null);
+
         const bids = await page.evaluate(() => {
-            const results: Array<{ bidderId: string; amount: number; bidTime?: string }> = [];
-            const processedTexts = new Set<string>();
+            // Find the bid table
+            const tables = Array.from(document.querySelectorAll('table'));
+            let bidRows = [];
 
-            // Strategy 1: Look for specific BidFTA history containers
-            const containers = document.querySelectorAll(
-                '[class*="history"], [class*="popup"], [class*="modal"], [class*="dropdown"], #bid-history, .bid-table'
-            );
-
-            // Strategy 2: Look for ANY table rows that look like bids
-            const allRows = document.querySelectorAll('tr, .row, div[role="row"], li');
-
-            const regexes = [
-                // Standard: ID, Amount, Date
-                /(\d{5,})\s+\$?([\d,]+\.?\d*)\s+(\d{1,2}\/\d{1,2}\/\d{4}.*?[AP]M)/i,
-                // Simple: ID, Amount
-                /bidder[:\s]*(\d{5,}).*?\$?([\d,]+\.?\d*)/i,
-                // ID only (sometimes amount is separate)
-                /^(\d{6,})$/
-            ];
-
-            const scanElement = (el: Element) => {
-                const text = el.textContent || '';
-                if (processedTexts.has(text) || text.length > 200) return;
-
-                // Try to find patterns
-                for (const regex of regexes) {
-                    const match = text.match(regex);
-                    if (match) {
-                        // Validate amount
-                        const amount = parseFloat(match[2]?.replace(/,/g, '') || '0');
-                        if (amount > 0) {
-                            results.push({
-                                bidderId: match[1],
-                                amount: amount,
-                                bidTime: match[3]?.trim()
-                            });
-                            processedTexts.add(text);
-                            return;
-                        }
-                    }
+            for (const table of tables) {
+                const headers = Array.from(table.querySelectorAll('th, td')).map(c => c.innerText.toLowerCase());
+                // Look for standard headers
+                if (headers.some(h => h.includes('bidder') || (h.includes('amount') && h.includes('bid')))) {
+                    // This is likely the bid table
+                    const rows = Array.from(table.querySelectorAll('tr'));
+                    // Skip rows that are clearly headers
+                    bidRows = rows.filter(r => {
+                        const cells = r.querySelectorAll('td');
+                        const text = r.innerText.toLowerCase();
+                        // Must have data cells and not be a header row
+                        return cells.length >= 2 && !text.includes('bidder') && !text.includes('amount');
+                    });
+                    break;
                 }
+            }
 
-                // Table Cell Strategy
-                if (el.tagName === 'TR') {
-                    const cells = el.querySelectorAll('td');
-                    if (cells.length >= 2) {
-                        let id = '', price = 0, time = '';
-                        cells.forEach(cell => {
-                            const t = cell.innerText.trim();
-                            if (/^\d{5,}$/.test(t)) id = t;
-                            if (t.includes('$')) price = parseFloat(t.replace(/[^0-9.]/g, ''));
-                            if (t.includes('/') && t.includes(':')) time = t;
-                        });
+            // Fallback: look for ANY table rows that look like bids if no table found
+            if (bidRows.length === 0) {
+                const allRows = Array.from(document.querySelectorAll('tr'));
+                bidRows = allRows.filter(r => {
+                    const cells = r.querySelectorAll('td');
+                    if (cells.length < 2) return false;
+                    const text = r.innerText;
+                    return text.includes('$') && /\d{4,}/.test(text); // Has $ and loose number for ID
+                });
+            }
 
-                        if (id && price > 0) {
-                            results.push({ bidderId: id, amount: price, bidTime: time });
-                            processedTexts.add(el.textContent || '');
-                        }
+            return bidRows.map(row => {
+                const cells = Array.from(row.querySelectorAll('td'));
+                if (cells.length < 2) return null;
+
+                // Try to identify columns by content
+                let bidderId = '';
+                let amount = 0;
+                let bidTime = new Date().toISOString();
+
+                cells.forEach(cell => {
+                    const text = cell.innerText.trim();
+                    // ID is usually 5+ digits
+                    if (/^\d{5,}$/.test(text) && !text.includes('$')) {
+                        bidderId = text;
                     }
-                }
-            };
+                    // Amount has $
+                    else if (text.includes('$')) {
+                        amount = parseFloat(text.replace(/[^0-9.]/g, '') || '0');
+                    }
+                    // Time usually has : / or "ago"
+                    else if (text.includes(':') || text.includes('/') || text.toLowerCase().includes('ago')) {
+                        bidTime = text;
+                    }
+                });
 
-            containers.forEach(c => c.querySelectorAll('*').forEach(scanElement));
-            if (results.length === 0) allRows.forEach(scanElement);
+                // Positional fallback if heuristics fail
+                if (!bidderId) bidderId = cells[0]?.innerText?.trim();
+                if (!amount) amount = parseFloat(cells[1]?.innerText?.replace(/[^0-9.]/g, '') || '0');
+                if (bidTime === new Date().toISOString()) bidTime = cells[2]?.innerText?.trim() || bidTime;
 
-            return results;
+                if (!amount) return null;
+
+                return {
+                    bidderId,
+                    amount,
+                    bidTime,
+                    riskLevel: 'LOW'
+                };
+            }).filter(b => b);
         });
 
         return bids;

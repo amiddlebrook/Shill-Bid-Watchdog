@@ -87,6 +87,10 @@ async function loadData() {
       api('/stats')
     ]);
 
+    if (statsRes.success) {
+      state.stats = statsRes.data;
+    }
+
     if (auctionsRes.success) {
       // Update state with deduplication
       const uniqueAuctions = [];
@@ -117,9 +121,6 @@ async function loadData() {
     if (alertsRes.success) {
       state.alerts = alertsRes.data || [];
       if (state.alerts.length > 0) log(`${state.alerts.length} active alerts`, 'warning');
-    }
-    if (statsRes.success) {
-      state.stats = statsRes.data;
     }
 
     state.lastUpdate = new Date();
