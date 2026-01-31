@@ -57,14 +57,17 @@ export async function navigateBidFTA(
             'Sec-Ch-Ua-Platform': '"Windows"'
         });
 
-        // Navigate to auction page
+        // Navigate with human-like timing
         console.log(`[Navigator] Navigating to ${url}...`);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+
+        // Random delay to appear human
+        await delay(2000 + Math.random() * 2000);
 
         // Wait for body to ensure page loaded
         await page.waitForSelector('body', { timeout: 10000 });
 
-        // Check for blocking/captcha (lighter check)
+        // Check for blocking/captcha
         const isBlocked = await page.evaluate(() => {
             const bodyText = document.body.innerText;
             return bodyText.includes('Access Denied') ||
@@ -73,56 +76,47 @@ export async function navigateBidFTA(
         });
 
         if (isBlocked) {
-            console.warn('[Navigator] Potential blocking validation detected');
-            return {
-                success: false,
-                error: 'Blocked by anti-bot protection'
-            };
+            console.warn('[Navigator] Blocked by anti-bot protection');
+            return { success: false, error: 'Blocked by anti-bot protection' };
         }
 
-        // Navigate with human-like timing
-        await page.goto(url, {
-            waitUntil: 'networkidle2',
-            timeout: 30000
-        });
-
-        // Random delay to appear human
-        await delay(1000 + Math.random() * 2000);
-
-        // Extract item name from title or meta tags
+        // Extract basic data immediately
         const itemName = await page.evaluate(() => {
             const h1 = document.querySelector('h1');
             if (h1 && h1.innerText.trim().length > 0) return h1.innerText.trim();
-
-            const metaTitle = document.querySelector('meta[property="og:title"]');
-            if (metaTitle) return metaTitle.getAttribute('content') || 'Unknown Item';
-
+            const ogTitle = document.querySelector('meta[property="og:title"]');
+            if (ogTitle) return ogTitle.getAttribute('content') || 'Unknown Item';
             return document.title || 'Unknown Item';
         });
 
-        // Extract current price
         const currentPrice = await extractCurrentPrice(page);
-        console.log(`[Navigator] Extracted: ${itemName} - $${currentPrice}`);
-
-        // Extract Status (Active vs Ended)
         const status = await extractStatus(page);
-        console.log(`[Navigator] Status: ${status}`);
-
-        // Extract Item Information fields
         const itemInfo = await extractItemInfo(page);
 
-        // Click on current bid area to reveal bid history popup
-        await openBidHistoryPopup(page);
+        // BID HISTORY EXTRACTION WITH RETRIES
+        let bids: any[] = [];
+        let retryCount = 0;
+        const maxRetries = 2;
 
-        // Extract bid history from popup
-        const bids = await extractBidHistoryFromPopup(page);
-        console.log(`[Navigator] Found ${bids.length} bids`);
+        while (bids.length === 0 && retryCount <= maxRetries && status !== 'ended') {
+            if (retryCount > 0) {
+                console.log(`[Navigator] Retry ${retryCount} for bid history...`);
+                await page.reload({ waitUntil: 'networkidle2' });
+                await delay(2000);
+            }
+
+            await openBidHistoryPopup(page);
+            bids = await extractBidHistoryFromPopup(page);
+            console.log(`[Navigator] Pass ${retryCount + 1}: Found ${bids.length} bids`);
+
+            if (bids.length > 0) break;
+            retryCount++;
+        }
 
         // FALLBACK: If ended and no bids, try to find "Sold to" info
         if (bids.length === 0 && status === 'ended') {
             const winner = await extractWinnerFromPage(page);
             if (winner) {
-                console.log(`[Navigator] Found winner from text: ${winner}`);
                 bids.push({
                     bidderId: winner,
                     amount: currentPrice,
@@ -131,11 +125,7 @@ export async function navigateBidFTA(
             }
         }
 
-        // Capture page text for debugging if extraction fails
-        // Capture page text for debugging (Always capture for diagnosis)
         const debugText = await page.evaluate(() => document.body.innerText.substring(0, 2000));
-        console.log('[Navigator] Debug content length:', debugText.length);
-
         await browser.close();
 
         // Create/update item fingerprint if we have a lot code
@@ -316,6 +306,10 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
                 if (line.match(/MSRP[:\s]*\$?([\d,.]+)/i)) {
                     result.msrp = line.match(/MSRP[:\s]*\$?([\d,.]+)/i)![1];
                 }
+                // Also handle "Original Price" or "Retail"
+                if (line.match(/(?:Retail|Original Price)[:\s]*\$?([\d,.]+)/i)) {
+                    result.msrp = line.match(/(?:Retail|Original Price)[:\s]*\$?([\d,.]+)/i)![1];
+                }
                 if (line.match(/Condition[:\s]*(.+)/i)) {
                     result.condition = line.match(/Condition[:\s]*(.+)/i)![1].trim();
                 }
@@ -326,11 +320,18 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
                 }
             });
 
-            // Also try direct text search in Item Information section
-            const fullText = container.textContent || '';
+            // FALLBACK: Heavy regex scan on full text if MSRP missing
+            if (!result.msrp) {
+                const fullText = document.body.innerText;
+                const msrpRegex = /(?:MSRP|Retail|Est\. Value)[:\s]*\$?([\d,]+\.?\d*)/i;
+                const match = fullText.match(msrpRegex);
+                if (match) result.msrp = match[1];
+            }
 
+            // Also try direct text search in Item Information section
+            const containerText = container.textContent || '';
             if (!result.lotCode) {
-                const lotMatch = fullText.match(/Lot Code[:\s]*([A-Z0-9]+)/i);
+                const lotMatch = containerText.match(/Lot Code[:\s]*([A-Z0-9]+)/i);
                 if (lotMatch) result.lotCode = lotMatch[1];
             }
 

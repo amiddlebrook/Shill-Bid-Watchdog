@@ -639,7 +639,7 @@ function DashboardView() {
                     <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
                 </div>
                 <div class="card-body" style="padding: 0">
-                    ${AuctionsTable(state.auctions.filter(a => a.status !== 'watching' || a.item_name).slice(0, 5))}
+                    ${AuctionsTable(state.auctions.filter(a => a.item_name && a.current_price > 0).slice(0, 5))}
                 </div>
             </div>
         </main>
@@ -663,7 +663,7 @@ function AuctionsView() {
                     <span class="card-title">All Auctions (${state.auctions.length})</span>
                 </div>
                 <div class="card-body" style="padding: 0">
-                    ${AuctionsTable(state.auctions.filter(a => a.status !== 'watching' || a.item_name), true)}
+                    ${AuctionsTable(state.auctions.filter(a => a.item_name && a.current_price > 0), true)}
                 </div>
             </div>
         </main>

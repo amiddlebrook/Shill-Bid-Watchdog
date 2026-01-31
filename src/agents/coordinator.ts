@@ -232,7 +232,11 @@ export class CoordinatorAgent implements DurableObject {
             UPDATE auctions SET
                 item_name = ?,
                 current_price = ?,
-                status = CASE WHEN status = 'deleted' THEN 'deleted' ELSE 'extracted' END,
+                status = CASE 
+                    WHEN status = 'deleted' THEN 'deleted'
+                    WHEN status = 'scanning' THEN 'watching'
+                    ELSE 'extracted'
+                END,
                 last_checked = datetime('now'),
                 updated_at = datetime('now')
             WHERE id = ?

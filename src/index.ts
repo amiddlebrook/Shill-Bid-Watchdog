@@ -468,13 +468,13 @@ app.post('/api/chat', async (c) => {
 
                 if (existing && existing.status === 'deleted') {
                     // Restore deleted auction
-                    await c.env.DB.prepare("UPDATE auctions SET status = 'watching', updated_at = datetime('now') WHERE id = ?").bind(existing.id).run();
+                    await c.env.DB.prepare("UPDATE auctions SET status = 'scanning', updated_at = datetime('now') WHERE id = ?").bind(existing.id).run();
                     targetId = existing.id;
                 } else {
                     // Insert new
                     const newAuction = await c.env.DB.prepare(`
                         INSERT INTO auctions (auction_id, source, url, status)
-                        VALUES (?, ?, ?, 'watching')
+                        VALUES (?, ?, ?, 'scanning')
                         RETURNING id
                     `).bind(auctionId, detectSource(url), url).first() as any;
                     targetId = newAuction?.id;
