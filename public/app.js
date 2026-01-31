@@ -423,7 +423,8 @@ function AuctionDetailView() {
                 </h1>
                 <div style="display: flex; gap: var(--space-2)">
                     <button class="btn btn-secondary" onclick="analyzeAuction(${auction.id})">Analyze</button>
-                    <a href="${auction.url}" target="_blank" class="btn btn-secondary">Open Original</a>
+                    <a href="${auction.url}" target="_blank" class="btn btn-secondary">Open</a>
+                    <button class="btn btn-secondary" style="color: var(--risk-critical); border-color: var(--risk-critical)" onclick="deleteAuction(${auction.id})">Delete</button>
                 </div>
             </div>
             
@@ -573,6 +574,20 @@ function StatCard(label, value, risk = '') {
     `;
 }
 
+async function deleteAuction(id) {
+  if (!confirm('Are you sure you want to delete this auction?')) return;
+  try {
+    const res = await api(`/auctions/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      log('Auction deleted', 'success');
+      if (state.currentView === 'auction-detail') navigate('auctions');
+      await loadData();
+    }
+  } catch (e) {
+    log('Failed to delete auction', 'error');
+  }
+}
+
 function AuctionsTable(auctions, showActions = false) {
   if (auctions.length === 0) {
     return '<div class="empty-state"><div class="empty-icon">📭</div><div>No auctions yet</div></div>';
@@ -612,7 +627,8 @@ function AuctionsTable(auctions, showActions = false) {
                             ${showActions ? `
                                 <td>
                                     <button class="btn btn-sm btn-secondary" onclick="viewAuction(${a.id})">View</button>
-                                    <button class="btn btn-sm btn-secondary" onclick="analyzeAuction(${a.id})">Analyze</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="analyzeAuction(${a.id})">Analyze</button>
+                                    <button class="btn btn-sm" style="color: var(--risk-critical)" onclick="deleteAuction(${a.id})">Del</button>
                                 </td>
                             ` : ''}
                         </tr>

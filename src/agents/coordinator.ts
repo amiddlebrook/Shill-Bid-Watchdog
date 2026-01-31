@@ -106,11 +106,14 @@ export class CoordinatorAgent implements DurableObject {
             this.taskQueue.processing = this.taskQueue.processing.filter(t => t !== task);
             await this.saveState();
 
-            // Update task in DB
+            // Update task in DB - saving result to last_error for debugging purposes
             await this.env.DB.prepare(`
-                UPDATE agent_tasks SET status = 'completed', completed_at = datetime('now')
+                UPDATE agent_tasks SET 
+                    status = 'completed', 
+                    completed_at = datetime('now'),
+                    last_error = ? 
                 WHERE task_type = ? AND auction_id = ?
-            `).bind(task.taskType, task.auctionId).run();
+            `).bind(JSON.stringify(result).substring(0, 5000), task.taskType, task.auctionId).run();
 
             return Response.json({ success: true, result });
         } catch (error) {
