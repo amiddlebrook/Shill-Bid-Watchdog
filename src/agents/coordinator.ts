@@ -136,37 +136,46 @@ export class CoordinatorAgent implements DurableObject {
             throw new Error('Target URL required for navigation');
         }
 
-        // Use Browser Rendering to navigate and extract data
-        // This is handled by the Navigator Agent
-        const response = await this.env.BROWSER.fetch(
-            new Request('https://browser-rendering.workers.dev/content', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: task.targetUrl,
-                    // Will implement full navigation in navigator.ts
-                })
-            })
-        );
+        // Import navigator functions
+        const { navigateBidFTA, storeAuctionData } = await import('./navigator');
 
-        if (!response.ok) {
-            throw new Error(`Navigation failed: ${response.statusText}`);
+        // Use Puppeteer via Navigator to extract data
+        const result = await navigateBidFTA(task.targetUrl, this.env);
+
+        if (!result.success) {
+            throw new Error(result.error || 'Navigation failed');
         }
 
-        // Parse the result and queue analysis
-        const data = await response.json();
+        // Store extracted data in database
+        const auctionDbId = await storeAuctionData(result, this.env);
+
+        // Update auction with extracted data
+        await this.env.DB.prepare(`
+            UPDATE auctions SET
+                item_name = ?,
+                current_price = ?,
+                status = 'extracted',
+                last_checked = datetime('now'),
+                updated_at = datetime('now')
+            WHERE id = ?
+        `).bind(result.itemName, result.currentPrice, task.auctionId || auctionDbId).run();
 
         // Queue the analysis task
         this.taskQueue.pending.push({
             taskType: 'analyze_auction',
-            auctionId: task.auctionId,
+            auctionId: task.auctionId || auctionDbId,
             status: 'pending',
             attempts: 0,
             scheduledAt: new Date().toISOString()
         });
         await this.saveState();
 
-        return data;
+        return {
+            success: true,
+            itemName: result.itemName,
+            bidsExtracted: result.bids?.length || 0,
+            lotCode: result.lotCode
+        };
     }
 
     private async executeExtractBids(task: AgentTask): Promise<unknown> {
