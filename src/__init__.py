@@ -7,6 +7,8 @@ from .extractor import BidHistoryExtractor
 from .features import BehaviorFeatureComputer
 from .rules import ShillBidRulesEngine
 from .alerts import AlertGenerator
+from .collector import AuctionCollector
+from .scoring import ShillBidScorer
 
 __all__ = [
     'AuctionScraper',
@@ -14,4 +16,6 @@ __all__ = [
     'BehaviorFeatureComputer',
     'ShillBidRulesEngine',
     'AlertGenerator',
+    'AuctionCollector',
+    'ShillBidScorer',
 ]
