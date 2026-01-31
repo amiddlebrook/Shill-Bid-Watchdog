@@ -654,20 +654,8 @@ function AuctionsView() {
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
             </div>
             
-            <!-- Quick Add -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <form onsubmit="handleSubmit(event)">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <input type="url" id="urlInput" class="form-input" 
-                                    placeholder="Paste BidFTA URL to watch..." required>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Add</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            <!-- AI Agent -->
+            ${ChatConsole()}
             
             <!-- Auctions Table -->
             <div class="card">
