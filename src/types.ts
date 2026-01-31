@@ -52,7 +52,7 @@ export interface Auction {
     currentPrice?: number;
     startPrice?: number;
     endTime?: string;
-    status: 'watching' | 'ended' | 'analyzed' | 'deleted';
+    status: 'watching' | 'ended' | 'analyzed' | 'deleted' | 'error' | 'extracted';
     riskLevel: RiskLevel;
     riskScore: number;
     lastChecked?: string;

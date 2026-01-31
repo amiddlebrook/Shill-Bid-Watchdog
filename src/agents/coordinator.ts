@@ -148,6 +148,14 @@ export class CoordinatorAgent implements DurableObject {
                 WHERE task_type = ? AND auction_id = ?
             `).bind(task.lastError, task.taskType, task.auctionId).run();
 
+            // If navigation failed, update auction status to error so UI shows it
+            if (task.taskType === 'navigate_auction' && task.auctionId) {
+                await this.env.DB.prepare(`
+                    UPDATE auctions SET status = 'error' 
+                    WHERE id = ?
+                `).bind(task.auctionId).run();
+            }
+
             // Retry up to 3 times
             if (task.attempts < 3) {
                 task.status = 'pending';
