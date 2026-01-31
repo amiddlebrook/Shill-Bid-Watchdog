@@ -57,6 +57,13 @@ export interface Auction {
     riskScore: number;
     lastChecked?: string;
     bids?: Bid[];
+    // BidFTA-specific fields
+    lotCode?: string;           // Item ID that persists across relists (e.g., TEA2525531)
+    auctionNumber?: string;     // Specific auction instance (e.g., AML2600499)
+    msrp?: number;              // Manufacturer suggested retail price
+    condition?: string;         // e.g., "Good Condition", "As Is"
+    itemFingerprintId?: number; // FK to item_fingerprints table
+    sellerId?: string;          // For BidFTA, always "BIDFTA"
 }
 
 export interface Bidder {
