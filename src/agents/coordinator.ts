@@ -42,6 +42,8 @@ export class CoordinatorAgent implements DurableObject {
                 return this.handleClear();
             case '/cancel-tasks':
                 return this.handleCancelTasks(request);
+            case '/run-task-sync':
+                return this.handleRunTaskSync(request);
             default:
                 return new Response('Not Found', { status: 404 });
         }
@@ -92,6 +94,30 @@ export class CoordinatorAgent implements DurableObject {
             await this.state.storage.setAlarm(Date.now() + 1000);
 
             return Response.json({ success: true, queued: true });
+        } catch (error) {
+            return Response.json({
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            }, { status: 500 });
+        }
+    }
+
+    private async handleRunTaskSync(request: Request): Promise<Response> {
+        try {
+            const body = await request.json() as Partial<AgentTask>;
+
+            const task: AgentTask = {
+                taskType: (body.taskType || 'navigate_auction') as TaskType,
+                targetUrl: body.targetUrl,
+                auctionId: body.auctionId,
+                status: 'running',
+                attempts: 0,
+                scheduledAt: new Date().toISOString()
+            };
+
+            await this.executeTask(task);
+
+            return Response.json({ success: true });
         } catch (error) {
             return Response.json({
                 success: false,
