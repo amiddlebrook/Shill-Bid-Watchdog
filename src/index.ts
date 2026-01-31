@@ -482,7 +482,7 @@ app.post('/api/chat', async (c) => {
                     })
                 }));
 
-                contextInfo = `I have automatically added the URL ${url} to the watch list and queued a scan.`;
+                contextInfo = `I have automatically added the URL ${url} to the watch list and queued a scan. The extraction is IN PROGRESS. Details (name, price) are NOT available yet. INFO: Do NOT make up facts.`;
             }
         }
 
@@ -501,6 +501,11 @@ app.post('/api/chat', async (c) => {
         - If asked to "analyze" or "scan" or "delete", USE THE TOOLS.
         - If asked to "list" or "show", USE THE list_auctions TOOL.
         - Explain risk scores based on tool outputs.
+
+        CRITICAL: 
+        - If an auction was just added, its data might be "Pending". DO NOT GUESS or HALLUCINATE item details.
+        - Only talk about specific item details if you see them in the "Context" or tool outputs.
+        - If data is missing, say "I'm gathering the data...".
 
         STYLE GUIDELINES (Enforced):
         - When presenting lists of any kind (auctions, bidders, logs), ALWAYS use Markdown Tables.
