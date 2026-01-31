@@ -463,30 +463,23 @@ function Sidebar() {
             </div>
         </aside>
     `;
-  <div class="nav-section">
-    <div class="nav-title">Last Updated</div>
-    <div class="text-sm text-muted" style="padding: 0 var(--space-2)">
-      ${state.lastUpdate ? state.lastUpdate.toLocaleTimeString() : 'Never'}
-    </div>
-  </div>
-        </aside >
-    `;
+
 }
 
 function ChatConsole() {
-    return `
-    < div class="card mb-4 chat-terminal" >
+  return `
+        <div class="card mb-4 chat-terminal">
             <div class="card-header border-bottom border-secondary d-flex justify-content-between">
                 <span class="card-title text-success">◆ Watchdog AI Agent</span>
                 <span class="badge bg-success" style="font-size: 0.7rem">ONLINE</span>
             </div>
             <div id="chatHistory" class="chat-history">
                 ${state.chatHistory.map(msg => {
-                    const content = msg.content || '';
-                     if (msg.role === 'typing') return `<div class="chat-message bot">Thinking...</div>`;
-                     const formatted = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline">$1</a>');
-                    return `<div class="chat-message ${msg.role}">${formatted}</div>`;
-                }).join('')}
+    const content = msg.content || '';
+    if (msg.role === 'typing') return `<div class="chat-message bot">Thinking...</div>`;
+    const formatted = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline">$1</a>');
+    return `<div class="chat-message ${msg.role}">${formatted}</div>`;
+  }).join('')}
             </div>
             <div class="chat-input-area">
                 <form onsubmit="handleChatMessage(event)">
@@ -513,7 +506,7 @@ function DashboardView() {
             </div>
             
             <!--AI Chat Agent-- >
-    ${ ChatConsole() }
+    ${ChatConsole()}
             
             < !--Stats Grid-- >
             <div class="grid-4">
@@ -656,7 +649,7 @@ function AuctionDetailView() {
             </div>
             
             <!--Alerts for this auction-- >
-    ${ alerts && alerts.length > 0 ? `
+    ${alerts && alerts.length > 0 ? `
                 <div class="card">
                     <div class="card-header"><span class="card-title">Alerts</span></div>
                     <div class="card-body" style="padding: 0">
@@ -757,7 +750,7 @@ function StatCard(label, value, risk = '') {
 async function deleteAuction(id) {
   if (!confirm('Are you sure you want to delete this auction?')) return;
   try {
-    const res = await api(`/ auctions / ${ id } `, { method: 'DELETE' });
+    const res = await api(`/ auctions / ${id} `, { method: 'DELETE' });
     if (res.success) {
       log('Auction deleted', 'success');
       if (state.currentView === 'auction-detail') navigate('auctions');
@@ -854,8 +847,8 @@ function formatTime(isoString) {
   const diff = now - date;
 
   if (diff < 60000) return 'Just now';
-  if (diff < 3600000) return `${ Math.floor(diff / 60000) }m ago`;
-  if (diff < 86400000) return `${ Math.floor(diff / 3600000) }h ago`;
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   return date.toLocaleDateString();
 }
 
@@ -878,8 +871,8 @@ function render() {
 
   root.innerHTML = `
   < div class="app" >
-    ${ Header() }
-            ${ Tabs() }
+    ${Header()}
+            ${Tabs()}
 <div class="app-content">
   ${Sidebar()}
   ${mainContent}
