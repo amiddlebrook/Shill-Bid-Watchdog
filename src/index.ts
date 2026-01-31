@@ -8,6 +8,7 @@ import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
 import type { Env, ApiResponse, Auction, Alert, WatchAuctionRequest } from './types';
 import { CoordinatorAgent } from './agents/coordinator';
+import { TOOLS, executeTool } from './tools';
 
 // Export Durable Object
 export { CoordinatorAgent };
@@ -130,8 +131,8 @@ app.delete('/api/auctions/:id', async (c) => {
         // 2. Delete children first (FK constraints)
         await c.env.DB.prepare('DELETE FROM alerts WHERE auction_id = ?').bind(id).run();
         await c.env.DB.prepare('DELETE FROM bids WHERE auction_id = ?').bind(id).run();
-        // 3. Delete parent
-        await c.env.DB.prepare('DELETE FROM auctions WHERE id = ?').bind(id).run();
+        // 3. Soft Delete parent (hide from view)
+        await c.env.DB.prepare("UPDATE auctions SET status = 'deleted' WHERE id = ?").bind(id).run();
 
         return c.json({ success: true, deleted: true });
     } catch (error) {
@@ -147,6 +148,7 @@ app.get('/api/auctions', async (c) => {
         (SELECT COUNT(*) FROM bids WHERE auction_id = a.id) as bid_count,
         (SELECT COUNT(*) FROM alerts WHERE auction_id = a.id AND acknowledged = 0) as alert_count
       FROM auctions a
+      WHERE a.status != 'deleted'
       ORDER BY a.updated_at DESC
       LIMIT 50
     `).all();
@@ -484,45 +486,93 @@ app.post('/api/chat', async (c) => {
             }
         }
 
-        // 2. Run AI logic
+        // 2. Run AI logic with Tool Loop
         const systemPrompt = `You are the ShillBid Watchdog AI, an expert in detecting auction fraud on platforms like BidFTA.
-        Your goal is to help users analyze auctions, understand shill bidding, and manage their watch list.
         
-        Capabilities:
-        - If the user provides a URL, I have ALREADY added it to the watch list for them (confirmed in context).
-        - If asked to "analyze" or "scan", confirm that the system runs automated analysis on all watched items.
-        - Explain risk scores: High risk means suspicious bidding patterns (same bidder, rapid bids).
+        TOOLS AVAILABLE:
+        ${JSON.stringify(TOOLS, null, 2)}
+        
+        INSTRUCTIONS:
+        - You can perform actions by outputting a JSON block: {"tool": "tool_name", "args": {...}}
+        - ONLY output the JSON block if you want to use a tool.
+        - After tool execution, you will see the result and can respond to the user.
+        - BE INTERACTIVE: Ask the user questions ("Should I analyze this?", "Do you want to delete this?") to keep them engaged.
+        - PROVIDE STATUS: When taking multiple steps, narrate what you are doing ("I am starting the scan...", "Found 5 bids, now calculating risk...").
+        - If asked to "analyze" or "scan" or "delete", USE THE TOOLS.
+        - If asked to "list" or "show", USE THE list_auctions TOOL.
+        - Explain risk scores based on tool outputs.
+
+        STYLE GUIDELINES (Enforced):
+        - When presenting lists of any kind (auctions, bidders, logs), ALWAYS use Markdown Tables.
+          Format: | ID | Name | Value |...
+        - When making assessments:
+          Use `### Key Findings` for bullet points.
+          Use `### Recommendation` for final verdict.
+        - Start response with a brief 1-line summary.
+        - Use bolding (**text**) for important metrics or risks.
         
         Current Context: ${contextInfo}
-        
-        Keep responses concise, professional, and helpful. Use markdown for formatting.`;
+        `;
 
-        const aiResponse = await runAI(c.env, systemPrompt, message, history || []);
+        let historyWithContext = [
+            { role: 'system', content: systemPrompt },
+            ...(history || []).slice(-10),
+            { role: 'user', content: message }
+        ];
+
+        let aiResponse = await runAI(c.env, historyWithContext);
+        let actionTaken = !!urlMatch;
+
+        // Tool execution loop (max 3 turns)
+        for (let i = 0; i < 3; i++) {
+            try {
+                // Check for tool call in response (JSON)
+                // Use a regex to find the last JSON block if mixed with text, or just parse if it looks like JSON
+                const jsonMatch = aiResponse.match(/\{[\s\S]*"tool"[\s\S]*\}/);
+
+                if (jsonMatch) {
+                    const toolCallStr = jsonMatch[0];
+                    const toolCall = JSON.parse(toolCallStr);
+
+                    if (toolCall.tool && toolCall.args) {
+                        actionTaken = true;
+                        // Execute tool
+                        const result = await executeTool(toolCall.tool, toolCall.args, c.env);
+
+                        // Append result to history
+                        historyWithContext.push({ role: 'assistant', content: aiResponse });
+                        historyWithContext.push({ role: 'system', content: `Tool Output (${toolCall.tool}): ${result}` });
+
+                        // Run AI again
+                        aiResponse = await runAI(c.env, historyWithContext);
+                    } else {
+                        break; // Invalid JSON structure, stop
+                    }
+                } else {
+                    break; // No tool call, stop
+                }
+            } catch (e) {
+                console.error('Tool loop error:', e);
+                break;
+            }
+        }
 
         return c.json({
             success: true,
             message: aiResponse,
-            actionTaken: !!urlMatch
+            actionTaken: actionTaken
         });
     } catch (error) {
         return c.json({ success: false, error: error instanceof Error ? error.message : 'AI Error' }, 500);
     }
 });
 
-async function runAI(env: Env, system: string, userMessage: string, history: any[]) {
-    // Format history for Llama-3
-    const messages = [
-        { role: 'system', content: system },
-        ...history.slice(-4), // Keep last 4 turns for context
-        { role: 'user', content: userMessage }
-    ];
-
+async function runAI(env: Env, messages: any[]) {
     try {
         const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
             messages
         });
 
-        // Response format depends on model, Llama-3 usually returns { response: string }
         return (response as any).response || "I'm having trouble thinking right now.";
     } catch (e) {
         console.error('AI Error:', e);

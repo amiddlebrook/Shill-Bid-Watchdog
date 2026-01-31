@@ -193,12 +193,12 @@ export class CoordinatorAgent implements DurableObject {
         // Store extracted data in database
         const auctionDbId = await storeAuctionData(result, this.env);
 
-        // Update auction with extracted data
+        // Update auction with extracted data, but don't resurrect if deleted
         await this.env.DB.prepare(`
             UPDATE auctions SET
                 item_name = ?,
                 current_price = ?,
-                status = 'extracted',
+                status = CASE WHEN status = 'deleted' THEN 'deleted' ELSE 'extracted' END,
                 last_checked = datetime('now'),
                 updated_at = datetime('now')
             WHERE id = ?
