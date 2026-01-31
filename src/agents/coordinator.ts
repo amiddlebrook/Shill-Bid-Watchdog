@@ -80,11 +80,15 @@ export class CoordinatorAgent implements DurableObject {
     }
 
     private async handleProcessNext(): Promise<Response> {
+        console.log('[Coordinator] handleProcessNext called, pending tasks:', this.taskQueue.pending.length);
+
         const task = this.taskQueue.pending.shift();
         if (!task) {
+            console.log('[Coordinator] No pending tasks');
             return Response.json({ success: true, message: 'No pending tasks' });
         }
 
+        console.log('[Coordinator] Processing task:', task.taskType, task.targetUrl);
         task.status = 'running';
         task.attempts++;
         this.taskQueue.processing.push(task);
@@ -92,7 +96,9 @@ export class CoordinatorAgent implements DurableObject {
 
         try {
             // Dispatch to appropriate handler
+            console.log('[Coordinator] Executing task...');
             const result = await this.executeTask(task);
+            console.log('[Coordinator] Task completed successfully:', result);
 
             // Mark as completed
             task.status = 'completed';
@@ -100,15 +106,29 @@ export class CoordinatorAgent implements DurableObject {
             this.taskQueue.processing = this.taskQueue.processing.filter(t => t !== task);
             await this.saveState();
 
+            // Update task in DB
+            await this.env.DB.prepare(`
+                UPDATE agent_tasks SET status = 'completed', completed_at = datetime('now')
+                WHERE task_type = ? AND auction_id = ?
+            `).bind(task.taskType, task.auctionId).run();
+
             return Response.json({ success: true, result });
         } catch (error) {
+            console.error('[Coordinator] Task failed:', error);
             task.status = 'failed';
             task.lastError = error instanceof Error ? error.message : 'Unknown error';
+
+            // Update task in DB
+            await this.env.DB.prepare(`
+                UPDATE agent_tasks SET status = 'failed', last_error = ?
+                WHERE task_type = ? AND auction_id = ?
+            `).bind(task.lastError, task.taskType, task.auctionId).run();
 
             // Retry up to 3 times
             if (task.attempts < 3) {
                 task.status = 'pending';
                 this.taskQueue.pending.push(task);
+                console.log('[Coordinator] Will retry, attempt', task.attempts);
             }
 
             this.taskQueue.processing = this.taskQueue.processing.filter(t => t !== task);

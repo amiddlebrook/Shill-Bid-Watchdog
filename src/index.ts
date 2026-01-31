@@ -29,6 +29,44 @@ app.get('/api/health', (c) => {
     });
 });
 
+// Debug: Get coordinator status
+app.get('/api/debug/coordinator', async (c) => {
+    try {
+        const coordinatorId = c.env.COORDINATOR.idFromName('main');
+        const coordinator = c.env.COORDINATOR.get(coordinatorId);
+        const response = await coordinator.fetch(new Request('http://internal/status'));
+        const data = await response.json();
+        return c.json({ success: true, data });
+    } catch (error) {
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+    }
+});
+
+// Debug: Manually trigger task processing
+app.post('/api/debug/process', async (c) => {
+    try {
+        const coordinatorId = c.env.COORDINATOR.idFromName('main');
+        const coordinator = c.env.COORDINATOR.get(coordinatorId);
+        const response = await coordinator.fetch(new Request('http://internal/process-next'));
+        const data = await response.json();
+        return c.json({ success: true, data });
+    } catch (error) {
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+    }
+});
+
+// Debug: Check agent tasks in database
+app.get('/api/debug/tasks', async (c) => {
+    try {
+        const tasks = await c.env.DB.prepare(`
+            SELECT * FROM agent_tasks ORDER BY scheduled_at DESC LIMIT 20
+        `).all();
+        return c.json({ success: true, data: tasks.results });
+    } catch (error) {
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+    }
+});
+
 // Watch a new auction
 app.post('/api/auctions/watch', async (c) => {
     try {
