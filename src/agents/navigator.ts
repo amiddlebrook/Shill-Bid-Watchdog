@@ -395,34 +395,47 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
         }
 
         // 2. Try clicking the element that contains the current price (most reliable)
-        // Find price first
-        const price = await page.evaluate(() => {
-            const bidEl = document.querySelector('#current-bid, .current-bid');
-            return bidEl ? bidEl.textContent : null;
+        // Find price text using robust regex first
+        const priceTextToFind = await page.evaluate(() => {
+            const bodyText = document.body.innerText;
+            const match = bodyText.match(/(?:Current Bid|High Bid)[:\s]*(\$[\d,]+\.?\d*)/i);
+            // Return the exact "$39.00" string
+            return match ? match[1] : null;
         });
 
-        if (price) {
-            // Try clicking exact match
-            await page.evaluate((priceText) => {
+        if (priceTextToFind) {
+            // Try clicking element with exact text match (or close to it)
+            await page.evaluate((text) => {
                 const elements = Array.from(document.querySelectorAll('*'));
-                const target = elements.find(el => el.textContent === priceText);
+                // Find smallest element containing the price text
+                const target = elements.reverse().find(el =>
+                    el.textContent &&
+                    el.textContent.includes(text) &&
+                    el.children.length === 0 // Prefer leaf nodes
+                );
                 if (target) (target as HTMLElement).click();
-            }, price);
+            }, priceTextToFind);
+
             clicked = true;
             await delay(1000);
             if (await page.$('table')) return;
         }
 
-        // 3. Try generic "Current Bid" text click (Label or Value)
+        // 3. Try generic "Current Bid" label click fallback
         if (!clicked || !(await page.$('table'))) {
             await page.evaluate(() => {
-                const xpath = "//*[contains(text(), 'Current Bid')]/..";
-                const matchingElement = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-                if (matchingElement) {
-                    // Click the parent or the element itself
-                    (matchingElement as HTMLElement).click();
-                    // Also try clicking children
-                    Array.from(matchingElement.children).forEach(c => (c as HTMLElement).click());
+                const xpath = "//*[contains(text(), 'Current Bid')]";
+                const iterator = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                if (iterator.snapshotLength > 0) {
+                    const label = iterator.snapshotItem(0);
+                    if (label) {
+                        // Click label
+                        (label as HTMLElement).click();
+                        // Click parent
+                        (label.parentElement as HTMLElement)?.click();
+                        // Click next sibling
+                        (label.nextSibling as HTMLElement)?.click();
+                    }
                 }
             });
         }
