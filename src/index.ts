@@ -501,14 +501,14 @@ app.post('/api/chat', async (c) => {
                     const freshData = await c.env.DB.prepare('SELECT * FROM auctions WHERE id = ?').bind(targetId).first();
 
                     if (freshData?.status === 'extracted' || freshData?.item_name) {
-                        contextInfo = `I have successfully added and SCANNED the auction. Item: "${freshData.item_name}". Price: $${freshData.current_price}. Status: ${freshData.status}.`;
+                        contextInfo = `COMMAND: REPORT DATA IMMEDIATELY. New Scan Complete. Item: "${freshData.item_name}". Price: $${freshData.current_price}. Status: ${freshData.status}. Risk: ${freshData.risk_level || 'Calculating...'}. SHOW THIS TO USER NOW.`;
                     } else if (freshData?.status === 'error') {
-                        contextInfo = `I tried to scan the auction but encountered an error. Status: error.`;
+                        contextInfo = `COMMAND: REPORT ERROR. Scan failed. Status: error. Tell user to retry.`;
                     } else {
-                        contextInfo = `I added the auction but the scan is still pending/incomplete.`;
+                        contextInfo = `COMMAND: REPORT PENDING. Scan initiated but data is still syncing. Tell user to wait.`;
                     }
                 } else {
-                    contextInfo = `Failed to track auction (DB Error).`;
+                    contextInfo = `COMMAND: REPORT ERROR. DB Error tracking auction.`;
                 }
             }
         }
@@ -542,9 +542,16 @@ app.post('/api/chat', async (c) => {
           Use '### Recommendation' for final verdict.
         - Start response with a brief 1-line summary.
         - Use bolding (**text**) for important metrics or risks.
+
+        IMMEDIATE ACTION REQUIRED:
+        - If the "Current Context" says "COMMAND: REPORT DATA", you MUST output the data in a Markdown Table immediately.
+        - Do NOT ask "Would you like to watch this?". It is already watched.
+        - Do NOT ask "Would you like to analyze?". just show the summary.
+        - Be concise.
         
         Current Context: ${contextInfo}
         `;
+
 
         let historyWithContext = [
             { role: 'system', content: systemPrompt },
@@ -573,7 +580,7 @@ app.post('/api/chat', async (c) => {
 
                         // Append result to history
                         historyWithContext.push({ role: 'assistant', content: aiResponse });
-                        historyWithContext.push({ role: 'system', content: `Tool Output (${toolCall.tool}): ${result}` });
+                        historyWithContext.push({ role: 'system', content: `Tool Output(${toolCall.tool}): ${result} ` });
 
                         // Run AI again
                         aiResponse = await runAI(c.env, historyWithContext);
@@ -620,18 +627,18 @@ function extractAuctionId(url: string): string {
     // BidFTA new format: https://www.bidfta.com/569416/item-detail/50968437
     // Pattern: /item-detail/12345678
     const bidfitaDetailMatch = url.match(/item-detail\/(\d+)/i);
-    if (bidfitaDetailMatch) return `bidfta-${bidfitaDetailMatch[1]}`;
+    if (bidfitaDetailMatch) return `bidfta - ${bidfitaDetailMatch[1]} `;
 
     // BidFTA old format: https://www.bidfta.com/items?item=123456
     const bidfitaQueryMatch = url.match(/[?&]item=(\d+)/i);
-    if (bidfitaQueryMatch) return `bidfta-${bidfitaQueryMatch[1]}`;
+    if (bidfitaQueryMatch) return `bidfta - ${bidfitaQueryMatch[1]} `;
 
     // eBay: https://www.ebay.com/itm/123456
     const ebayMatch = url.match(/itm[\\/=](\d+)/i);
-    if (ebayMatch) return `ebay-${ebayMatch[1]}`;
+    if (ebayMatch) return `ebay - ${ebayMatch[1]} `;
 
     // Fallback: hash the URL
-    return `unknown-${hashCode(url)}`;
+    return `unknown - ${hashCode(url)} `;
 }
 
 function detectSource(url: string): 'bidfta' | 'ebay' | 'other' {
