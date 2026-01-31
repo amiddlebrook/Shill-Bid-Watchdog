@@ -684,3 +684,32 @@ body {
 .mb-4 {
   margin-bottom: var(--space-4);
 }
+
+/* Nav Badge */
+.nav-badge {
+  margin-left: auto;
+  background: var(--risk-critical);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Detail Table */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.detail-table td {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.detail-table td:first-child {
+  width: 140px;
+  font-size: 12px;
+}
