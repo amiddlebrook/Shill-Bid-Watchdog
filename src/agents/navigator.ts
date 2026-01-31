@@ -69,31 +69,26 @@ export async function navigateBidFTA(
         await page.waitForSelector('body', { timeout: 10000 });
 
         // Anti-Popup: Close newsletter or overlay if present
+        console.log('[Navigator] Checking for popups...');
         await page.evaluate(() => {
-            const closeButtons = [
-                'button:contains("No Thanks")',
-                'button:contains("Close")',
-                'a:contains("No Thanks")',
-                '.modal-close',
-                '.close-button',
-                'div:contains("No Thanks")'
-            ];
-            // Simple text-based search as fallback
-            const labels = ["No Thanks", "No thanks", "Close", "✕"];
-            labels.forEach(l => {
-                const xpath = `//*[contains(text(), '${l}')]`;
-                const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
-                let node = result.iterateNext();
-                while (node) {
-                    if (node instanceof HTMLElement && typeof node.click === 'function') {
-                        node.click();
-                    }
-                    node = result.iterateNext();
+            // Find buttons or links containing "No Thanks", "Close", or "✕"
+            const labels = ["No Thanks", "No thanks", "Close", "✕", "Dismiss"];
+            const elements = Array.from(document.querySelectorAll('button, a, div, span'));
+
+            for (const el of elements) {
+                const text = (el as HTMLElement).innerText || '';
+                if (labels.some(l => text.includes(l))) {
+                    console.log(`[Browser] Found and clicking popup closer: ${text}`);
+                    (el as HTMLElement).click();
                 }
-            });
+            }
+
+            // Also try specific ID for known newsletter popups if applicable
+            const modalClose = document.querySelector('.modal-close, .close-button, #close-button');
+            if (modalClose) (modalClose as HTMLElement).click();
         }).catch(() => null);
 
-        await delay(1000);
+        await delay(1500);
 
         // Check for blocking/captcha
         const isBlocked = await page.evaluate(() => {
@@ -323,8 +318,8 @@ async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResu
                 if (line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)) {
                     result.auctionNumber = line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)![1];
                 }
-                // Broad MSRP match - look for any $ amount after MSRP or Retail
-                const msrpLineMatch = line.match(/(?:MSRP|Retail|Price|Value)[\s\S]*?\$([\d,]+\.?\d*)/i);
+                // Broad MSRP match - catch "Retail Value", "Estimated Retail", etc.
+                const msrpLineMatch = line.match(/(?:MSRP|Retail|Value|Value|Price)[\s\S]*?\$([\d,]+\.?\d*)/i);
                 if (msrpLineMatch && !result.msrp) {
                     result.msrp = msrpLineMatch[1];
                 }
@@ -332,7 +327,6 @@ async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResu
                     result.condition = line.match(/Condition[:\s]*(.+)/i)![1].trim();
                 }
                 if (line.match(/Pickup Location[:\s]*(.+)/i)) {
-                    // Avoid capturing just "Pickup Location:"
                     const val = line.match(/Pickup Location[:\s]*(.+)/i)![1].trim();
                     if (val.length > 2) result.pickupLocation = val;
                 }
@@ -341,7 +335,8 @@ async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResu
             // FALLBACK: Heavy regex scan on full text if MSRP missing
             if (!result.msrp) {
                 const fullText = document.body.innerText;
-                const msrpRegex = /(?:MSRP|Retail|Est\. Value)[:\s]*\$?([\d,]+\.?\d*)/i;
+                // Matches "Retail Value: $375.00" or similar
+                const msrpRegex = /(?:MSRP|Retail|Retail Value|Est\. Value|Expected Price)[:\s]*\$?([\d,]+\.?\d*)/i;
                 const match = fullText.match(msrpRegex);
                 if (match) result.msrp = match[1];
             }
@@ -385,114 +380,49 @@ async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResu
  */
 async function openBidHistoryPopup(page: Page): Promise<void> {
     try {
-        // BidFTA shows bid history when you click on the current bid amount
-        // Use XPath for text-based matching since Puppeteer doesn't support :contains() natively
-        const bidHistorySelectors = [
-            '#current-bid',
-            '.current-bid',
-            '[class*="current-bid"]',
-            '[class*="bid-amount"]',
-            '.winning-bid',
-            '.price-section',
-            'button',
-            'a'
-        ];
+        console.log('[Navigator] Attempting to open bid history...');
 
-        let clicked = false;
+        let clicked = await page.evaluate(() => {
+            const labels = ["Bids", "History", "Current Bid", "Current bid", "Bid History"];
+            const elements = Array.from(document.querySelectorAll('button, a, div, span, p, h4')).reverse();
 
-        // 1. Try modern Puppeteer text selection
-        // Note: Puppeteer's `::-p-text` pseudo-selector requires Puppeteer 15+ and Chrome 102+
-        // Ensure your environment supports this or provide a fallback.
-        try {
-            const elements = await page.$$('::-p-text(Current Bid), ::-p-text(Current bid), ::-p-text(Bid History)');
             for (const el of elements) {
-                await el.click().catch(() => null);
-                await delay(500);
-                if (await page.$('table')) {
-                    clicked = true;
-                    break;
-                }
-            }
-        } catch (e) {
-            console.log('[Navigator] p-text failed, falling back...');
-        }
+                const text = (el as HTMLElement).innerText || '';
+                // Avoid clicking the "Increments" link if possible
+                if (text.toLowerCase().includes('increment')) continue;
 
-        // 2. Try selectors
-        if (!clicked) {
-            for (const target of bidHistorySelectors) {
-                try {
-                    const el = await page.$(target);
-                    if (el) {
-                        const text = await page.evaluate((e: any) => (e as HTMLElement).innerText || '', el);
-                        if (text.toLowerCase().includes('bid') || text.includes('$')) {
-                            await el.click();
-                            await delay(1000);
-                            if (await page.$('table')) {
-                                clicked = true;
-                                break;
-                            }
-                        }
-                    }
-                } catch (error) {
-                    // Skip invalid selectors
+                if (labels.some(l => text.includes(l))) {
+                    console.log(`[Browser] Clicking potential history trigger: ${text}`);
+                    (el as HTMLElement).scrollIntoView();
+                    (el as HTMLElement).click();
+                    return true;
                 }
             }
-        }
-        // 3. Try clicking the element that contains the current price (most reliable)
-        // Find price text using robust regex first
-        const priceTextToFind = await page.evaluate(() => {
-            const bodyText = document.body.innerText;
-            const match = bodyText.match(/(?:Current Bid|High Bid)[:\s]*(\$[\d,]+\.?\d*)/i);
-            // Return the exact "$39.00" string
-            return match ? match[1] : null;
+
+            // Fallback: Click price area
+            const priceEl = Array.from(document.querySelectorAll('*')).find(e =>
+                (e as HTMLElement).innerText &&
+                (e as HTMLElement).innerText.includes('$') &&
+                e.children.length === 0
+            );
+            if (priceEl) {
+                console.log(`[Browser] Clicking price fallback: ${(priceEl as HTMLElement).innerText}`);
+                (priceEl as HTMLElement).click();
+                return true;
+            }
+
+            return false;
         });
 
-        if (priceTextToFind) {
-            // Try clicking element with exact text match (or close to it)
-            await page.evaluate((text) => {
-                const elements = Array.from(document.querySelectorAll('*'));
-                // Find smallest element containing the price text
-                const target = elements.reverse().find(el =>
-                    el.textContent &&
-                    el.textContent.includes(text) &&
-                    el.children.length === 0 // Prefer leaf nodes
-                );
-                if (target) (target as HTMLElement).click();
-            }, priceTextToFind);
-
-            clicked = true;
-            await delay(1000);
-            if (await page.$('table')) return;
+        if (clicked) {
+            console.log('[Navigator] Trigger clicked, waiting for modal...');
+            await delay(2500);
+        } else {
+            console.warn('[Navigator] No history trigger found via text scanning');
         }
-
-        // 3. Try generic "Current Bid" or "Bid History" label click fallback
-        if (!clicked || !(await page.$('table'))) {
-            const foundCount = await page.evaluate(() => {
-                const labels = ["Current Bid", "Current bid", "Bid History", "history"];
-                let count = 0;
-                labels.forEach((l: string) => {
-                    const xpath = `//*[contains(text(), '${l}')]`;
-                    const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                    for (let i = 0; i < result.snapshotLength; i++) {
-                        const el = result.snapshotItem(i) as HTMLElement;
-                        if (el && typeof el.click === 'function') {
-                            el.click();
-                            // If it has a parent that might be the actual button
-                            el.parentElement?.click();
-                            count++;
-                        }
-                    }
-                });
-                return count;
-            });
-            if (foundCount > 0) clicked = true;
-        }
-
-        // Wait for popup animation/load
-        await delay(2000);
 
     } catch (error) {
-        console.error('Failed to open bid history popup:', error);
+        console.error('[Navigator] Failed to open bid history popup:', error);
     }
 }
 
