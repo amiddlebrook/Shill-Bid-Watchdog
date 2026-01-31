@@ -11,17 +11,16 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "shillbid-watchdog-db"
-database_id = "placeholder-will-be-set-after-creation"
+database_id = "67de689d-41c6-4762-8e8f-894457b9a9c1"
 
 # KV Namespace for caching
 [[kv_namespaces]]
 binding = "CACHE"
-id = "placeholder-will-be-set-after-creation"
+id = "9c8633593ef140e6996301d2a8d287f0"
 
-# Browser Rendering for AI Agent navigation (requires --remote for dev)
-# Uncomment when deploying or using wrangler dev --remote
-# [browser]
-# binding = "BROWSER"
+# Browser Rendering for AI Agent navigation
+[browser]
+binding = "BROWSER"
 
 # Workers AI for ML models
 [ai]
@@ -43,4 +42,4 @@ new_classes = ["CoordinatorAgent"]
 
 # Environment variables
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
