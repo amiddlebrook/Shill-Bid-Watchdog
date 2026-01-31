@@ -47,14 +47,18 @@ class AuctionCollector:
         """
         Collect auction data from a specific URL
         
+        Note: This is a placeholder for future implementation.
+        When implemented, will use Playwright or requests to scrape real auction pages.
+        
         Args:
             url (str): Auction page URL
             
         Returns:
-            dict: Collected auction data or None if collection failed
+            dict: Collected auction data or None if collection failed/not implemented
         """
         # Placeholder for real URL collection
-        # In production, would use Playwright or requests
+        # TODO: Implement using Playwright for JavaScript-rendered pages
+        # or requests + BeautifulSoup for static pages
         return None
     
     def collect_from_urls(self, urls: List[str]) -> List[Dict[str, Any]]:

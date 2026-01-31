@@ -40,8 +40,8 @@ class AuctionRecord(Base):
     item_name = Column(String(500), nullable=False)
     current_price = Column(Float, nullable=True)
     start_price = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
+    updated_at = Column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
     
     # Relationships
     bids = relationship("BidRecord", back_populates="auction", cascade="all, delete-orphan")
@@ -57,7 +57,7 @@ class BidRecord(Base):
     bidder_id = Column(String(100), index=True, nullable=False)
     amount = Column(Float, nullable=False)
     timestamp = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
     
     # Relationships
     auction = relationship("AuctionRecord", back_populates="bids")
@@ -74,8 +74,8 @@ class BidderRecord(Base):
     total_auctions = Column(Integer, default=0)
     avg_bid_ratio = Column(Float, default=0.0)
     suspicion_score = Column(Float, default=0.0)
-    first_seen = Column(DateTime, default=datetime.utcnow)
-    last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    first_seen = Column(DateTime, default=lambda: datetime.utcnow())
+    last_seen = Column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
 
 
 class AlertRecord(Base):
@@ -89,7 +89,7 @@ class AlertRecord(Base):
     violations = Column(Text, nullable=True)  # JSON string
     evidence = Column(Text, nullable=True)  # JSON string
     acknowledged = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
     
     # Relationships
     auction = relationship("AuctionRecord", back_populates="alerts")

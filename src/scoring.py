@@ -34,13 +34,20 @@ class ShillBidScorer:
     """
     
     # Scoring weights for different factors
+    # Weight rationale:
+    # - bid_ratio (0.25): Primary indicator - high bid participation is strong signal
+    # - concentration (0.20): Auction-level indicator of few bidders dominating
+    # - bidding_pairs (0.20): Pattern of same bidders repeatedly competing
+    # - never_won (0.15): Supporting indicator - suspicious if combined with high activity
+    # - rapid_bidding (0.10): Future: Time-based pattern detection (not yet implemented)
+    # - bid_increment (0.10): Future: Minimum increment patterns (not yet implemented)
     WEIGHTS = {
         'bid_ratio': 0.25,
         'concentration': 0.20,
         'bidding_pairs': 0.20,
         'never_won': 0.15,
-        'rapid_bidding': 0.10,
-        'bid_increment': 0.10,
+        'rapid_bidding': 0.10,  # Placeholder for future implementation
+        'bid_increment': 0.10,  # Placeholder for future implementation
     }
     
     def score_bidder(
@@ -90,10 +97,11 @@ class ShillBidScorer:
                 break
         components['bidding_pairs'] = pair_score
         
-        # Default scores for components not yet computed
-        components['concentration'] = 0.0
-        components['rapid_bidding'] = 0.0
-        components['bid_increment'] = 0.0
+        # Placeholder scores for features not yet implemented
+        # These will be computed when timestamp analysis is added
+        components['concentration'] = 0.0  # Future: bid concentration at bidder level
+        components['rapid_bidding'] = 0.0  # Future: time between bids analysis
+        components['bid_increment'] = 0.0  # Future: minimum increment pattern detection
         
         # Calculate weighted total score
         total_score = sum(
