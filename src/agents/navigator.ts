@@ -279,31 +279,26 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
 
             // Find all label-value pairs
             // BidFTA uses format like: <span>Lot Code:</span> <span>TEA2525531</span>
-            const rows = container.querySelectorAll('[class*="row"], tr, div > span + span');
+            // Improved iteration: look at all text nodes/lines
+            const textLines = (container.innerText || '').split('\n').map(l => l.trim()).filter(l => l);
 
-            rows.forEach(row => {
-                const text = row.textContent || '';
-
-                // Check for known fields
-                if (text.includes('Lot Code')) {
-                    const match = text.match(/Lot Code[:\s]*([A-Z0-9]+)/i);
-                    if (match) result.lotCode = match[1];
+            textLines.forEach(line => {
+                if (line.match(/Lot Code[:\s]*([A-Z0-9]+)/i)) {
+                    result.lotCode = line.match(/Lot Code[:\s]*([A-Z0-9]+)/i)![1];
                 }
-                if (text.includes('Auction Number')) {
-                    const match = text.match(/Auction Number[:\s]*([A-Z0-9]+)/i);
-                    if (match) result.auctionNumber = match[1];
+                if (line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)) {
+                    result.auctionNumber = line.match(/Auction Number[:\s]*([A-Z0-9]+)/i)![1];
                 }
-                if (text.includes('MSRP')) {
-                    const match = text.match(/MSRP[:\s]*\$?([\d,.]+)/i);
-                    if (match) result.msrp = match[1];
+                if (line.match(/MSRP[:\s]*\$?([\d,.]+)/i)) {
+                    result.msrp = line.match(/MSRP[:\s]*\$?([\d,.]+)/i)![1];
                 }
-                if (text.includes('Condition')) {
-                    const match = text.match(/Condition[:\s]*(.+?)(?:$|\n)/i);
-                    if (match) result.condition = match[1].trim();
+                if (line.match(/Condition[:\s]*(.+)/i)) {
+                    result.condition = line.match(/Condition[:\s]*(.+)/i)![1].trim();
                 }
-                if (text.includes('Pickup')) {
-                    const match = text.match(/Pickup[:\s]*(.+?)(?:$|\n)/i);
-                    if (match) result.pickupLocation = match[1].trim();
+                if (line.match(/Pickup Location[:\s]*(.+)/i)) {
+                    // Avoid capturing just "Pickup Location:"
+                    const val = line.match(/Pickup Location[:\s]*(.+)/i)![1].trim();
+                    if (val.length > 2) result.pickupLocation = val;
                 }
             });
 
@@ -375,22 +370,35 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
             }
         }
 
-        // 2. Try text-based click (User indicated "Current Bid" is the trigger)
+        // 2. Try clicking the element that contains the current price (most reliable)
+        // Find price first
+        const price = await page.evaluate(() => {
+            const bidEl = document.querySelector('#current-bid, .current-bid');
+            return bidEl ? bidEl.textContent : null;
+        });
+
+        if (price) {
+            // Try clicking exact match
+            await page.evaluate((priceText) => {
+                const elements = Array.from(document.querySelectorAll('*'));
+                const target = elements.find(el => el.textContent === priceText);
+                if (target) (target as HTMLElement).click();
+            }, price);
+            clicked = true;
+            await delay(1000);
+            if (await page.$('table')) return;
+        }
+
+        // 3. Try generic "Current Bid" text click (Label or Value)
         if (!clicked || !(await page.$('table'))) {
             await page.evaluate(() => {
-                const elements = Array.from(document.querySelectorAll('div, span, b, strong, label'));
-                // Find element containing "Current Bid" that isn't just a container
-                const target = elements.find(el =>
-                    el.innerText &&
-                    el.innerText.toLowerCase().includes('current bid') &&
-                    el.children.length === 0 // Leaf node or close to it
-                );
-                if (target) {
-                    (target as HTMLElement).click();
-                } else {
-                    // Try "High Bidder"
-                    const target2 = elements.find(el => el.innerText && el.innerText.includes('High Bidder'));
-                    if (target2) (target2 as HTMLElement).click();
+                const xpath = "//*[contains(text(), 'Current Bid')]/..";
+                const matchingElement = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                if (matchingElement) {
+                    // Click the parent or the element itself
+                    (matchingElement as HTMLElement).click();
+                    // Also try clicking children
+                    Array.from(matchingElement.children).forEach(c => (c as HTMLElement).click());
                 }
             });
         }
