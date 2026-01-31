@@ -80,6 +80,7 @@ style.textContent = `
       content: '...';
       animation: dots 1.5s steps(5, end) infinite;
   }
+  @keyframes dots {
       0%, 20% { content: '.'; }
       40% { content: '..'; }
       60% { content: '...'; }
@@ -462,43 +463,44 @@ function parseMarkdown(text) {
   html = html.replace(/<li class="chat-md-list-item">(.*?)<\/li>/g, '<div style="margin-left: 10px;">• $1</div>');
 
   return html;
+}
 
-  // Event Handlers
-  function handleSubmit(e) {
-    e.preventDefault();
-    const input = document.getElementById('urlInput');
-    const url = input.value.trim();
-    if (url) {
-      watchAuction(url);
-      input.value = '';
-    }
+// Event Handlers
+function handleSubmit(e) {
+  e.preventDefault();
+  const input = document.getElementById('urlInput');
+  const url = input.value.trim();
+  if (url) {
+    watchAuction(url);
+    input.value = '';
   }
+}
 
-  function navigate(view) {
-    state.currentView = view;
-    state.selectedAuction = null;
-    log(`Navigated to ${view}`, 'info');
-    render();
+function navigate(view) {
+  state.currentView = view;
+  state.selectedAuction = null;
+  log(`Navigated to ${view}`, 'info');
+  render();
+}
+
+function viewAuction(id) {
+  state.currentView = 'auction-detail';
+  loadAuctionDetail(id);
+}
+
+function switchPlatform(platform) {
+  if (platform === 'ebay') {
+    log('eBay integration coming soon', 'warning');
+    return;
   }
+  state.currentPlatform = platform;
+  log(`Switched to ${platform}`, 'info');
+  render();
+}
 
-  function viewAuction(id) {
-    state.currentView = 'auction-detail';
-    loadAuctionDetail(id);
-  }
-
-  function switchPlatform(platform) {
-    if (platform === 'ebay') {
-      log('eBay integration coming soon', 'warning');
-      return;
-    }
-    state.currentPlatform = platform;
-    log(`Switched to ${platform}`, 'info');
-    render();
-  }
-
-  // Components
-  function Header() {
-    return `
+// Components
+function Header() {
+  return `
         <header class="header">
             <div class="logo">
                 <div class="logo-icon">W</div>
@@ -512,10 +514,10 @@ function parseMarkdown(text) {
             </div>
         </header>
     `;
-  }
+}
 
-  function Tabs() {
-    return `
+function Tabs() {
+  return `
         <div class="platform-tabs">
             <button class="platform-tab ${state.currentPlatform === 'bidfta' ? 'active' : ''}" 
                     onclick="switchPlatform('bidfta')">BidFTA</button>
@@ -523,19 +525,19 @@ function parseMarkdown(text) {
                     onclick="switchPlatform('ebay')">eBay <span class="coming-soon">Soon</span></button>
         </div>
     `;
-  }
+}
 
-  function Sidebar() {
-    const navItems = [
-      { id: 'dashboard', label: 'Dashboard', icon: '◉' },
-      { id: 'auctions', label: 'Auctions', icon: '◎' },
-      { id: 'lists', label: 'Lists', icon: '≣' },
-      { id: 'assessments', label: 'Assessments', icon: '⚖' },
-      { id: 'alerts', label: 'Alerts', icon: '⚠', count: state.stats.activeAlerts },
-      { id: 'bidders', label: 'Bidders', icon: '◯' }
-    ];
+function Sidebar() {
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '◉' },
+    { id: 'auctions', label: 'Auctions', icon: '◎' },
+    { id: 'lists', label: 'Lists', icon: '≣' },
+    { id: 'assessments', label: 'Assessments', icon: '⚖' },
+    { id: 'alerts', label: 'Alerts', icon: '⚠', count: state.stats.activeAlerts },
+    { id: 'bidders', label: 'Bidders', icon: '◯' }
+  ];
 
-    return `
+  return `
         <aside class="sidebar">
             <nav class="nav-section">
                 <div class="nav-title">Navigation</div>
@@ -576,10 +578,10 @@ function parseMarkdown(text) {
         </aside>
     `;
 
-  }
+}
 
-  function ChatConsole() {
-    return `
+function ChatConsole() {
+  return `
         <div class="card mb-4 chat-terminal">
             <div class="card-header border-bottom border-secondary d-flex justify-content-between">
                 <span class="card-title text-success">◆ Watchdog AI Agent</span>
@@ -587,11 +589,11 @@ function parseMarkdown(text) {
             </div>
             <div id="chatHistory" class="chat-history">
                 ${state.chatHistory.map(msg => {
-      const content = msg.content || '';
-      if (msg.role === 'typing') return `<div class="chat-message bot">Thinking...</div>`;
-      const formatted = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline">$1</a>');
-      return `<div class="chat-message ${msg.role}">${formatted}</div>`;
-    }).join('')}
+    const content = msg.content || '';
+    if (msg.role === 'typing') return `<div class="chat-message bot">Thinking...</div>`;
+    const formatted = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline">$1</a>');
+    return `<div class="chat-message ${msg.role}">${formatted}</div>`;
+  }).join('')}
             </div>
             <div class="chat-input-area">
                 <form onsubmit="handleChatMessage(event)">
@@ -603,14 +605,14 @@ function parseMarkdown(text) {
             </div>
         </div >
     `;
-  }
+}
 
-  // ============================================================================
-  // VIEWS
-  // ============================================================================
+// ============================================================================
+// VIEWS
+// ============================================================================
 
-  function DashboardView() {
-    return `
+function DashboardView() {
+  return `
         <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Dashboard</h1>
@@ -642,10 +644,10 @@ function parseMarkdown(text) {
             </div>
         </main>
     `;
-  }
+}
 
-  function AuctionsView() {
-    return `
+function AuctionsView() {
+  return `
         <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Auctions</h1>
@@ -678,16 +680,16 @@ function parseMarkdown(text) {
             </div>
         </main>
     `;
+}
+
+function AuctionDetailView() {
+  const { auction, bids, alerts } = state.selectedAuction || {};
+
+  if (!auction) {
+    return `<main class="main"><div class="empty-state">Loading...</div></main>`;
   }
 
-  function AuctionDetailView() {
-    const { auction, bids, alerts } = state.selectedAuction || {};
-
-    if (!auction) {
-      return `<main class="main"><div class="empty-state">Loading...</div></main>`;
-    }
-
-    return `
+  return `
         <main class="main">
             <div class="page-header">
                 <h1 class="page-title">
@@ -758,10 +760,10 @@ function parseMarkdown(text) {
             ` : ''}
         </main>
     `;
-  }
+}
 
-  function AlertsView() {
-    return `
+function AlertsView() {
+  return `
         <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Alerts</h1>
@@ -774,21 +776,21 @@ function parseMarkdown(text) {
                 </div>
                 <div class="card-body" style="padding: 0">
                     ${state.alerts.length === 0
-        ? '<div class="empty-state"><div class="empty-icon">✓</div><div>No active alerts</div></div>'
-        : state.alerts.map(AlertItem).join('')
-      }
+      ? '<div class="empty-state"><div class="empty-icon">✓</div><div>No active alerts</div></div>'
+      : state.alerts.map(AlertItem).join('')
+    }
                 </div>
             </div>
         </main>
     `;
-  }
+}
 
-  `;
+`;
   }
 
   function ListsView() {
     return `
-    < main class="main" >
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Custom Lists</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -827,7 +829,7 @@ function parseMarkdown(text) {
                 </div>
             </div>
         </main >
-    `;
+  `;
   }
   
   function AssessmentsView() {
@@ -835,7 +837,7 @@ function parseMarkdown(text) {
       const assessedAuctions = state.auctions.filter(a => a.risk_score > 0 || a.risk_level !== 'NONE');
       
       return `
-    < main class="main" >
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Assessments</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -870,7 +872,7 @@ function parseMarkdown(text) {
                 </div>
             </div>
         </main >
-    `;
+  `;
   }
 
   function BiddersView() {
@@ -881,7 +883,7 @@ function parseMarkdown(text) {
     });
 
     return `
-    < main class="main" >
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Bidders</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -900,7 +902,7 @@ function parseMarkdown(text) {
                 </div>
             </div>
         </main >
-    `;
+  `;
   }
 
 
@@ -912,11 +914,11 @@ function parseMarkdown(text) {
   function StatCard(label, value, risk = '') {
     const color = risk ? `style = "color: var(--risk-${risk})"` : '';
     return `
-    < div class="stat-card" >
+  < div class="stat-card" >
             <div class="stat-label">${label}</div>
             <div class="stat-value" ${color}>${value}</div>
         </div >
-    `;
+  `;
   }
 
   async function deleteAuction(id) {
@@ -939,21 +941,21 @@ function parseMarkdown(text) {
     }
 
     return `
-    < div class="table-container" >
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Auction ID</th>
-            <th>Item</th>
-            <th>Status</th>
-            <th>Risk</th>
-            <th>Bids</th>
-            <th>Last Checked</th>
-            ${showActions ? '<th>Actions</th>' : ''}
-          </tr>
-        </thead>
-        <tbody>
-          ${auctions.map(a => `
+  < div class="table-container" >
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Auction ID</th>
+          <th>Item</th>
+          <th>Status</th>
+          <th>Risk</th>
+          <th>Bids</th>
+          <th>Last Checked</th>
+          ${showActions ? '<th>Actions</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${auctions.map(a => `
                         <tr>
                             <td>
                                 <span class="text-mono table-link" onclick="viewAuction(${a.id})" style="cursor:pointer">
@@ -977,15 +979,15 @@ function parseMarkdown(text) {
                             ` : ''}
                         </tr>
                     `).join('')}
-        </tbody>
-      </table>
+      </tbody>
+    </table>
         </div >
-    `;
+  `;
   }
 
   function AlertItem(alert) {
     return `
-    < div class="alert-item" >
+  < div class="alert-item" >
             <div class="alert-indicator ${(alert.risk_level || 'low').toLowerCase()}"></div>
             <div class="alert-content">
                 <div class="alert-title">${alert.item_name || alert.auction_code || 'Alert'}</div>
@@ -995,7 +997,7 @@ function parseMarkdown(text) {
             </div>
             <button class="btn btn-sm btn-secondary" onclick="acknowledgeAlert(${alert.id})">Dismiss</button>
         </div >
-    `;
+  `;
   }
 
   function renderLogs(count) {
@@ -1004,11 +1006,11 @@ function parseMarkdown(text) {
       return '<div class="empty-state">No activity yet</div>';
     }
     return logs.map(e => `
-    < div class="log-entry ${e.type}" >
+  < div class="log-entry ${e.type}" >
             <span class="log-time">${e.time}</span>
             <span class="log-message">${e.message}</span>
         </div >
-    `).join('');
+  `).join('');
   }
 
   function formatTime(isoString) {
@@ -1042,15 +1044,15 @@ function parseMarkdown(text) {
     }
 
     root.innerHTML = `
-    < div class="app" >
-      ${ Header() }
+  < div class="app" >
+    ${ Header() }
             ${ Tabs() }
-  <div class="app-content">
-    ${Sidebar()}
-    ${mainContent}
-  </div>
+<div class="app-content">
+  ${Sidebar()}
+  ${mainContent}
+</div>
         </div >
-    `;
+  `;
 
     updateStatusIndicator();
   }
