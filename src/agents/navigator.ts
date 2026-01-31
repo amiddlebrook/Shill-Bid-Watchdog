@@ -104,6 +104,10 @@ export async function navigateBidFTA(
         const currentPrice = await extractCurrentPrice(page);
         console.log(`[Navigator] Extracted: ${itemName} - $${currentPrice}`);
 
+        // Extract Status (Active vs Ended)
+        const status = await extractStatus(page);
+        console.log(`[Navigator] Status: ${status}`);
+
         // Extract Item Information fields
         const itemInfo = await extractItemInfo(page);
 
@@ -113,6 +117,19 @@ export async function navigateBidFTA(
         // Extract bid history from popup
         const bids = await extractBidHistoryFromPopup(page);
         console.log(`[Navigator] Found ${bids.length} bids`);
+
+        // FALLBACK: If ended and no bids, try to find "Sold to" info
+        if (bids.length === 0 && status === 'ended') {
+            const winner = await extractWinnerFromPage(page);
+            if (winner) {
+                console.log(`[Navigator] Found winner from text: ${winner}`);
+                bids.push({
+                    bidderId: winner,
+                    amount: currentPrice,
+                    bidTime: new Date().toISOString()
+                });
+            }
+        }
 
         // Capture page text for debugging if extraction fails
         // Capture page text for debugging (Always capture for diagnosis)
@@ -146,6 +163,7 @@ export async function navigateBidFTA(
             msrp: itemInfo.msrp,
             condition: itemInfo.condition,
             pickupLocation: itemInfo.pickupLocation,
+            status,
             // Return debug info if needed
             debug: debugText
         };
@@ -173,7 +191,12 @@ async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
                 '.current-bid',
                 '.bid-amount',
                 '[class*="Price"]',
-                '[class*="amount"]'
+                '.current-bid',
+                '.bid-amount',
+                '[class*="Price"]',
+                '[class*="amount"]',
+                '.winning-bid',
+                '[class*="WinningBid"]'
             ];
 
             for (const selector of selectors) {
@@ -193,6 +216,45 @@ async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
         return price || 0;
     } catch {
         return 0;
+    }
+}
+
+/**
+ * Extract Auction Status
+ */
+async function extractStatus(page: puppeteer.Page): Promise<'watching' | 'ended'> {
+    try {
+        return await page.evaluate(() => {
+            const body = document.body.innerText.toLowerCase();
+            // Check for common "Ended" indicators
+            if (body.includes('bidding ended') ||
+                body.includes('auction closed') ||
+                body.includes('winning bid:') ||
+                body.includes('sold to') ||
+                document.querySelector('.status-closed') ||
+                document.querySelector('.auction-ended')) {
+                return 'ended';
+            }
+            return 'watching';
+        });
+    } catch {
+        return 'watching';
+    }
+}
+
+/**
+ * Extract Winner ID from page text (fallback)
+ */
+async function extractWinnerFromPage(page: puppeteer.Page): Promise<string | null> {
+    try {
+        return await page.evaluate(() => {
+            const text = document.body.innerText;
+            // Look for "Sold to: 12345" or "Winning Bidder: 123456"
+            const match = text.match(/(?:Sold to|Winner|Winning Bidder)[:\s]+(\d{5,})/i);
+            return match ? match[1] : null;
+        });
+    } catch {
+        return null;
     }
 }
 
@@ -466,21 +528,23 @@ export async function storeAuctionData(
       UPDATE auctions SET
         item_name = ?,
         current_price = ?,
+        status = ?,
         updated_at = datetime('now')
       WHERE id = ?
-    `).bind(result.itemName, result.currentPrice, existing.id).run();
+    `).bind(result.itemName, result.currentPrice, result.status || 'watching', existing.id).run();
         auctionDbId = existing.id;
     } else {
         // Create new auction
         const insertResult = await env.DB.prepare(`
-      INSERT INTO auctions (auction_id, source, url, item_name, current_price)
-      VALUES (?, 'bidfta', ?, ?, ?)
+      INSERT INTO auctions (auction_id, source, url, item_name, current_price, status)
+      VALUES (?, 'bidfta', ?, ?, ?, ?)
       RETURNING id
     `).bind(
             result.auctionId,
             result.auctionNumber ? `https://www.bidfta.com/items?item=${result.auctionNumber}` : '',
             result.itemName,
-            result.currentPrice
+            result.currentPrice,
+            result.status || 'watching'
         ).first() as any;
         auctionDbId = insertResult.id;
     }

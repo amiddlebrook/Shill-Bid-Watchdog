@@ -175,6 +175,7 @@ export interface NavigationResult {
     }>;
     error?: string;
     screenshot?: ArrayBuffer;
+    status?: 'watching' | 'ended';
 }
 
 // ============================================================================
