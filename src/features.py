@@ -76,9 +76,8 @@ class BehaviorFeatureComputer:
             return 0
         
         # Find top 2 bidders by bid count
-        bidder_counts = [(bid_count, bidder_id) 
-                         for bidder_id, data in bid_history['bidders'].items() 
-                         for bid_count in [data['bid_count']]]
+        bidder_counts = [(data['bid_count'], bidder_id) 
+                         for bidder_id, data in bid_history['bidders'].items()]
         bidder_counts.sort(reverse=True)
         
         top_2_bids = sum(count for count, _ in bidder_counts[:2])
