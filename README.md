@@ -1,97 +1,109 @@
-# ShillBidWatchdog (MVP)
+# ShillBid Watchdog
 
-External-only watchdog for detecting likely shill bidders in online auction houses.
+AI-powered shill bid detection using Cloudflare Workers with an AI Agent Swarm architecture.
 
-## MVP Goals
-- ✅ Scrape public auction pages
-- ✅ Extract bid histories
-- ✅ Compute behavior features
-- ✅ Run explainable shill-bid rules
-- ✅ Emit evidence-backed alerts
+## 🚀 Quick Start
 
-No internal APIs. No auth bypass.
+### Prerequisites
+- Node.js 18+
+- Cloudflare account (for deployment)
+- Wrangler CLI (`npm install -g wrangler`)
 
-## Features
-
-### Detection Rules
-The system uses multiple explainable rules to detect shill bidding:
-
-1. **High Bid Ratio**: Detects when a single bidder participates in >40% of all bids
-2. **High Bid Concentration**: Detects when top 2 bidders make >70% of all bids
-3. **Frequent Bidding Pairs**: Detects when same bidders repeatedly compete against each other
-4. **Bid Inflation Pattern**: Detects bidders who frequently bid but never win
-
-### Risk Levels
-- **NONE**: No suspicious patterns detected
-- **LOW**: 1 rule violation
-- **MEDIUM**: 2 rule violations
-- **HIGH**: 3 rule violations
-- **CRITICAL**: 4+ rule violations
-
-## Installation
+### Local Development
 
 ```bash
-pip install -e .
+# Install dependencies
+npm install
+
+# Start local dev server
+npm run dev
 ```
 
-## Run
+Visit `http://localhost:8787` to see the dashboard.
+
+### Cloudflare Setup (For Full Features)
 
 ```bash
-python src/main.py
+# Login to Cloudflare
+wrangler login
+
+# Create D1 database
+npm run db:create
+
+# Update wrangler.toml with the database_id from above
+
+# Run migrations
+npm run db:migrate
+
+# Create KV namespace
+npm run kv:create
+
+# Update wrangler.toml with the KV id
+
+# Deploy
+npm run deploy
 ```
 
-## Architecture
-
-The MVP consists of 5 modular components:
-
-1. **AuctionScraper** (`src/scraper.py`): Scrapes public auction pages
-2. **BidHistoryExtractor** (`src/extractor.py`): Extracts structured bid histories
-3. **BehaviorFeatureComputer** (`src/features.py`): Computes behavioral features
-4. **ShillBidRulesEngine** (`src/rules.py`): Runs explainable detection rules
-5. **AlertGenerator** (`src/alerts.py`): Generates evidence-backed alerts
-
-## Sample Output
+## 🏗️ Architecture
 
 ```
-============================================================
-ShillBidWatchdog MVP - Shill Bidder Detection
-============================================================
-
-[1/5] Scraping public auction pages...
-  → Scraped 3 auction pages
-
-[2/5] Extracting bid histories...
-  → Extracted 3 bid histories
-
-[3/5] Computing behavior features...
-  → Computed features for 3 auctions
-
-[4/5] Running shill-bid detection rules...
-  → Found 2 suspicious bidding patterns
-
-[5/5] Generating alerts...
-  → Generated 2 alerts
-
-============================================================
-ALERTS - Suspicious Shill Bidding Detected
-============================================================
-
-ALERT: Auction AUC001
-Risk Level: CRITICAL
-Summary: Detected 4 suspicious pattern(s) - Risk Level: CRITICAL
-
-Evidence:
-  1. High Bid Ratio
-     → Bidder(s) participate in unusually high percentage of bids
-       • Bidder user_123: bid_ratio=55.6%, bid_count=5
-       • Bidder user_456: bid_ratio=44.4%, bid_count=4
-  ...
+┌─────────────────────────────────────────────────────────┐
+│                    AI Agent Swarm                        │
+│  ┌───────────────┐  ┌───────────────┐  ┌─────────────┐ │
+│  │  Coordinator  │──│   Navigator   │──│  Analyzer   │ │
+│  │ (Durable Obj) │  │(Browser Rend) │  │(Workers AI) │ │
+│  └───────────────┘  └───────────────┘  └─────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+         ┌────────┐  ┌──────────┐  ┌─────────┐
+         │   D1   │  │ Vectorize│  │   KV    │
+         └────────┘  └──────────┘  └─────────┘
 ```
 
-## Next Steps (Beyond MVP)
+## 🔍 Detection Rules
 
-- Integrate with real auction site APIs
-- Add machine learning models
-- Implement database for historical analysis
-- Add web dashboard for monitoring
-- Expand rule set based on domain expertise
+1. **High Bid Ratio** - Single bidder participates in >40% of bids
+2. **High Concentration** - Top 2 bidders make >70% of bids  
+3. **Frequent Bidding Pairs** - Same bidders repeatedly compete
+4. **Bid Inflation** - Bidders drive price up but never win
+
+## 📁 Project Structure
+
+```
+src/
+├── index.ts              # Worker entry + API routes
+├── types.ts              # TypeScript definitions
+├── features.ts           # Behavior feature computation
+├── rules.ts              # Detection rules engine
+├── scoring.ts            # Risk scoring system
+└── agents/
+    ├── coordinator.ts    # Task orchestration (Durable Object)
+    ├── navigator.ts      # Browser automation
+    └── analyzer.ts       # ML + rules analysis
+
+public/
+├── index.html            # Dashboard
+├── styles.css            # Dark theme
+└── app.js                # Frontend logic
+```
+
+## 🎯 Supported Auction Sites
+
+- ✅ BidFTA (primary target)
+- 🔜 eBay (coming soon)
+
+## 📊 Risk Levels
+
+| Level | Score | Color | Description |
+|-------|-------|-------|-------------|
+| NONE | 0-0.2 | 🟢 | No suspicious patterns |
+| LOW | 0.2-0.4 | 🔵 | 1 rule violation |
+| MEDIUM | 0.4-0.6 | 🟡 | 2 rule violations |
+| HIGH | 0.6-0.8 | 🟠 | 3 rule violations |
+| CRITICAL | 0.8-1.0 | 🔴 | 4+ rule violations |
+
+## License
+
+MIT

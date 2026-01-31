@@ -1,0 +1,46 @@
+name = "shillbid-watchdog"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets
+[assets]
+directory = "./public"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "shillbid-watchdog-db"
+database_id = "placeholder-will-be-set-after-creation"
+
+# KV Namespace for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "placeholder-will-be-set-after-creation"
+
+# Browser Rendering for AI Agent navigation (requires --remote for dev)
+# Uncomment when deploying or using wrangler dev --remote
+# [browser]
+# binding = "BROWSER"
+
+# Workers AI for ML models
+[ai]
+binding = "AI"
+
+# Vectorize for pattern embeddings
+[[vectorize]]
+binding = "VECTORS"
+index_name = "bid-patterns"
+
+# Durable Objects for Agent Coordination
+[[durable_objects.bindings]]
+name = "COORDINATOR"
+class_name = "CoordinatorAgent"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["CoordinatorAgent"]
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
