@@ -10,7 +10,7 @@ export interface Env {
     DB: D1Database;
     CACHE: KVNamespace;
     BROWSER: Fetcher;
-    AI: Ai;
+    AI: any;
     VECTORS: VectorizeIndex;
     COORDINATOR: DurableObjectNamespace;
     ENVIRONMENT: string;
