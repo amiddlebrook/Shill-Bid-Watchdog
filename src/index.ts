@@ -626,19 +626,19 @@ async function runAI(env: Env, messages: any[]) {
 function extractAuctionId(url: string): string {
     // BidFTA new format: https://www.bidfta.com/569416/item-detail/50968437
     // Pattern: /item-detail/12345678
-    const bidfitaDetailMatch = url.match(/item-detail\/(\d+)/i);
-    if (bidfitaDetailMatch) return `bidfta - ${bidfitaDetailMatch[1]} `;
+    const bidfitaDetailMatch = url.match(/item-detail\/(\d+)/i) || url.match(/item[=\/](\d+)/i);
+    if (bidfitaDetailMatch) return `bidfta-${bidfitaDetailMatch[1]}`;
 
     // BidFTA old format: https://www.bidfta.com/items?item=123456
     const bidfitaQueryMatch = url.match(/[?&]item=(\d+)/i);
-    if (bidfitaQueryMatch) return `bidfta - ${bidfitaQueryMatch[1]} `;
+    if (bidfitaQueryMatch) return `bidfta-${bidfitaQueryMatch[1]}`;
 
     // eBay: https://www.ebay.com/itm/123456
     const ebayMatch = url.match(/itm[\\/=](\d+)/i);
-    if (ebayMatch) return `ebay - ${ebayMatch[1]} `;
+    if (ebayMatch) return `ebay-${ebayMatch[1]}`;
 
     // Fallback: hash the URL
-    return `unknown - ${hashCode(url)} `;
+    return `unknown-${hashCode(url)}`;
 }
 
 function detectSource(url: string): 'bidfta' | 'ebay' | 'other' {

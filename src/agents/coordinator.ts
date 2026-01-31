@@ -224,8 +224,8 @@ export class CoordinatorAgent implements DurableObject {
             throw new Error(result.error || 'Navigation failed');
         }
 
-        // Store extracted data in database
-        const auctionDbId = await storeAuctionData(result, this.env);
+        // Store extracted data in database (update existing if ID provided)
+        const auctionDbId = await storeAuctionData(result, this.env, task.auctionId);
 
         // Update auction with extracted data, but don't resurrect if deleted
         await this.env.DB.prepare(`

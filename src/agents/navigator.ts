@@ -549,41 +549,56 @@ function extractAuctionIdFromUrl(url: string): string {
  */
 export async function storeAuctionData(
     result: BidFTANavigationResult,
-    env: Env
+    env: Env,
+    targetDbId?: number
 ): Promise<number> {
-    // Check if auction already exists
-    const existing = await env.DB.prepare(`
-    SELECT id FROM auctions WHERE auction_id = ?
-  `).bind(result.auctionId).first() as any;
-
     let auctionDbId: number;
 
-    if (existing) {
-        // Update existing auction
+    // IF we have a target ID, explicitly update it
+    if (targetDbId) {
         await env.DB.prepare(`
-      UPDATE auctions SET
-        item_name = ?,
-        current_price = ?,
-        status = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).bind(result.itemName, result.currentPrice, result.status || 'watching', existing.id).run();
-        auctionDbId = existing.id;
+        UPDATE auctions SET
+            item_name = ?,
+            current_price = ?,
+            status = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        `).bind(result.itemName, result.currentPrice, result.status || 'watching', targetDbId).run();
+        auctionDbId = targetDbId;
     } else {
-        // Create new auction
-        const insertResult = await env.DB.prepare(`
-      INSERT INTO auctions (auction_id, source, url, item_name, current_price, status)
-      VALUES (?, 'bidfta', ?, ?, ?, ?)
-      RETURNING id
-    `).bind(
-            result.auctionId,
-            result.auctionNumber ? `https://www.bidfta.com/items?item=${result.auctionNumber}` : '',
-            result.itemName,
-            result.currentPrice,
-            result.status || 'watching'
-        ).first() as any;
-        auctionDbId = insertResult.id;
+        // Fallback: Check if auction already exists by ID string
+        const existing = await env.DB.prepare(`
+        SELECT id FROM auctions WHERE auction_id = ?
+    `).bind(result.auctionId).first() as any;
+
+        if (existing) {
+            // Update existing auction
+            await env.DB.prepare(`
+        UPDATE auctions SET
+            item_name = ?,
+            current_price = ?,
+            status = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        `).bind(result.itemName, result.currentPrice, result.status || 'watching', existing.id).run();
+            auctionDbId = existing.id;
+        } else {
+            // Create new auction
+            const insertResult = await env.DB.prepare(`
+        INSERT INTO auctions (auction_id, source, url, item_name, current_price, status)
+        VALUES (?, 'bidfta', ?, ?, ?, ?)
+        RETURNING id
+        `).bind(
+                result.auctionId,
+                result.auctionNumber ? `https://www.bidfta.com/items?item=${result.auctionNumber}` : '',
+                result.itemName,
+                result.currentPrice,
+                result.status || 'watching'
+            ).first() as any;
+            auctionDbId = insertResult.id;
+        }
     }
+
 
     // Store lot code for relist tracking
     if (result.lotCode) {
