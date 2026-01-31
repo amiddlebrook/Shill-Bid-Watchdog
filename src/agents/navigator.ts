@@ -9,6 +9,7 @@
  * - Bid History: Shown in popup when clicking "current bid" area
  */
 
+import type { Browser, Page } from '@cloudflare/puppeteer';
 import puppeteer from '@cloudflare/puppeteer';
 import type { Env, NavigationResult, Bid } from '../types';
 import { getOrCreateFingerprint } from '../historical';
@@ -37,7 +38,7 @@ export async function navigateBidFTA(
     url: string,
     env: Env
 ): Promise<BidFTANavigationResult> {
-    let browser: puppeteer.Browser | null = null;
+    let browser: Browser | null = null;
 
     try {
         // Connect to Browser Rendering
@@ -145,17 +146,15 @@ export async function navigateBidFTA(
         return {
             success: true,
             auctionId: itemInfo.auctionNumber || extractAuctionIdFromUrl(url),
+            auctionNumber: itemInfo.auctionNumber,
             itemName,
             currentPrice,
-            bids,
-            lotCode: itemInfo.lotCode,
-            auctionNumber: itemInfo.auctionNumber,
+            status: status as "watching" | "ended" | undefined,
             msrp: itemInfo.msrp,
             condition: itemInfo.condition,
             pickupLocation: itemInfo.pickupLocation,
-            status,
-            // Return debug info if needed
-            debug: debugText
+            lotCode: itemInfo.lotCode,
+            bids
         };
     } catch (error) {
         if (browser) {
@@ -172,7 +171,7 @@ export async function navigateBidFTA(
 /**
  * Extract current price from page
  */
-async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
+async function extractCurrentPrice(page: Page): Promise<number> {
     try {
         const price = await page.evaluate(() => {
             // 1. Try robust regex on full text first (fastest and often most reliable for "Label: Value")
@@ -236,7 +235,7 @@ async function extractCurrentPrice(page: puppeteer.Page): Promise<number> {
 /**
  * Extract Auction Status
  */
-async function extractStatus(page: puppeteer.Page): Promise<'watching' | 'ended'> {
+async function extractStatus(page: Page): Promise<string> {
     try {
         return await page.evaluate(() => {
             const body = document.body.innerText.toLowerCase();
@@ -259,7 +258,7 @@ async function extractStatus(page: puppeteer.Page): Promise<'watching' | 'ended'
 /**
  * Extract Winner ID from page text (fallback)
  */
-async function extractWinnerFromPage(page: puppeteer.Page): Promise<string | null> {
+async function extractWinnerFromPage(page: Page): Promise<string | null> {
     try {
         return await page.evaluate(() => {
             const text = document.body.innerText;
@@ -276,13 +275,7 @@ async function extractWinnerFromPage(page: puppeteer.Page): Promise<string | nul
  * Extract Item Information fields from BidFTA page
  * These are in the "Item Information" section with label: value format
  */
-async function extractItemInfo(page: puppeteer.Page): Promise<{
-    lotCode?: string;
-    auctionNumber?: string;
-    msrp?: number;
-    condition?: string;
-    pickupLocation?: string;
-}> {
+async function extractItemInfo(page: Page): Promise<Partial<BidFTANavigationResult>> {
     try {
         const info = await page.evaluate(() => {
             const result: Record<string, string> = {};
@@ -294,9 +287,9 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
             // Find all label-value pairs
             // BidFTA uses format like: <span>Lot Code:</span> <span>TEA2525531</span>
             // Improved iteration: look at all text nodes/lines
-            const textLines = (container.innerText || '').split('\n').map(l => l.trim()).filter(l => l);
+            const textLines = ((container as HTMLElement).innerText || '').split('\n').map((l: string) => l.trim()).filter((l: string) => l);
 
-            textLines.forEach(line => {
+            textLines.forEach((line: string) => {
                 if (line.match(/Lot Code[:\s]*([A-Z0-9]+)/i)) {
                     result.lotCode = line.match(/Lot Code[:\s]*([A-Z0-9]+)/i)![1];
                 }
@@ -363,42 +356,62 @@ async function extractItemInfo(page: puppeteer.Page): Promise<{
 /**
  * Click on current bid area to open the bid history popup
  */
-async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
+async function openBidHistoryPopup(page: Page): Promise<void> {
     try {
         // BidFTA shows bid history when you click on the current bid amount
-        const clickTargets = [
-            'button:contains("Current Bid")',
-            'button:contains("Current bid")',
-            'a:contains("Current Bid")',
-            'div:contains("Current Bid")',
-            'span:contains("Current Bid")',
+        // Use XPath for text-based matching since Puppeteer doesn't support :contains() natively
+        const bidHistorySelectors = [
             '#current-bid',
             '.current-bid',
             '[class*="current-bid"]',
             '[class*="bid-amount"]',
             '.winning-bid',
-            'button:contains("Bid History")',
-            'a:contains("Bid History")',
             '.price-section',
-            '[data-testid="bid-history"]'
+            'button',
+            'a'
         ];
 
         let clicked = false;
 
-        // 1. Try specific selectors
-        for (const selector of clickTargets) {
-            const element = await page.$(selector);
-            if (element) {
-                await element.click();
-                clicked = true;
-                await delay(500); // Small delay between attempts
-
-                // Check if popup/table appeared immediately
-                if (await page.$('table')) return;
+        // 1. Try modern Puppeteer text selection
+        // Note: Puppeteer's `::-p-text` pseudo-selector requires Puppeteer 15+ and Chrome 102+
+        // Ensure your environment supports this or provide a fallback.
+        try {
+            const elements = await page.$$('::-p-text(Current Bid), ::-p-text(Current bid), ::-p-text(Bid History)');
+            for (const el of elements) {
+                await el.click().catch(() => null);
+                await delay(500);
+                if (await page.$('table')) {
+                    clicked = true;
+                    break;
+                }
             }
+        } catch (e) {
+            console.log('[Navigator] p-text failed, falling back...');
         }
 
-        // 2. Try clicking the element that contains the current price (most reliable)
+        // 2. Try selectors
+        if (!clicked) {
+            for (const target of bidHistorySelectors) {
+                try {
+                    const el = await page.$(target);
+                    if (el) {
+                        const text = await page.evaluate((e: any) => (e as HTMLElement).innerText || '', el);
+                        if (text.toLowerCase().includes('bid') || text.includes('$')) {
+                            await el.click();
+                            await delay(1000);
+                            if (await page.$('table')) {
+                                clicked = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    // Skip invalid selectors
+                }
+            }
+        }
+        // 3. Try clicking the element that contains the current price (most reliable)
         // Find price text using robust regex first
         const priceTextToFind = await page.evaluate(() => {
             const bodyText = document.body.innerText;
@@ -430,7 +443,7 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
             const foundCount = await page.evaluate(() => {
                 const labels = ["Current Bid", "Current bid", "Bid History", "history"];
                 let count = 0;
-                labels.forEach(l => {
+                labels.forEach((l: string) => {
                     const xpath = `//*[contains(text(), '${l}')]`;
                     const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
                     for (let i = 0; i < result.snapshotLength; i++) {
@@ -465,7 +478,7 @@ async function openBidHistoryPopup(page: puppeteer.Page): Promise<void> {
  * Extract bid history from the page (popup or embedded)
  */
 async function extractBidHistoryFromPopup(
-    page: puppeteer.Page
+    page: Page
 ): Promise<Array<{ bidderId: string; amount: number; bidTime?: string }>> {
     try {
         // Wait for potential bid table
@@ -474,10 +487,10 @@ async function extractBidHistoryFromPopup(
         const bids = await page.evaluate(() => {
             // Find the bid table
             const tables = Array.from(document.querySelectorAll('table'));
-            let bidRows = [];
+            let bidRows: any[] = [];
 
             for (const table of tables) {
-                const headers = Array.from(table.querySelectorAll('th, td')).map(c => c.innerText.toLowerCase());
+                const headers = Array.from(table.querySelectorAll('th, td')).map(c => (c as HTMLElement).innerText.toLowerCase());
                 // Look for standard headers
                 if (headers.some(h => h.includes('bidder') || (h.includes('amount') && h.includes('bid')))) {
                     // This is likely the bid table
@@ -485,7 +498,7 @@ async function extractBidHistoryFromPopup(
                     // Skip rows that are clearly headers
                     bidRows = rows.filter(r => {
                         const cells = r.querySelectorAll('td');
-                        const text = r.innerText.toLowerCase();
+                        const text = (r as HTMLElement).innerText.toLowerCase();
                         // Must have data cells and not be a header row
                         return cells.length >= 2 && !text.includes('bidder') && !text.includes('amount');
                     });
@@ -499,7 +512,7 @@ async function extractBidHistoryFromPopup(
                 bidRows = allRows.filter(r => {
                     const cells = r.querySelectorAll('td');
                     if (cells.length < 2) return false;
-                    const text = r.innerText;
+                    const text = (r as HTMLElement).innerText;
                     return text.includes('$') && /\d{4,}/.test(text); // Has $ and loose number for ID
                 });
             }
@@ -511,10 +524,10 @@ async function extractBidHistoryFromPopup(
                 // Try to identify columns by content
                 let bidderId = '';
                 let amount = 0;
-                let bidTime = new Date().toISOString();
+                let bidTime = '';
 
                 cells.forEach(cell => {
-                    const text = cell.innerText.trim();
+                    const text = (cell as HTMLElement).innerText.trim();
                     // ID is usually 5+ digits
                     if (/^\d{5,}$/.test(text) && !text.includes('$')) {
                         bidderId = text;
@@ -530,19 +543,18 @@ async function extractBidHistoryFromPopup(
                 });
 
                 // Positional fallback if heuristics fail
-                if (!bidderId) bidderId = cells[0]?.innerText?.trim();
-                if (!amount) amount = parseFloat(cells[1]?.innerText?.replace(/[^0-9.]/g, '') || '0');
-                if (bidTime === new Date().toISOString()) bidTime = cells[2]?.innerText?.trim() || bidTime;
+                if (!bidderId) bidderId = (cells[0] as HTMLElement).innerText?.trim() || '';
+                if (!amount) amount = parseFloat((cells[1] as HTMLElement).innerText?.replace(/[^0-9.]/g, '') || '0');
+                if (!bidTime) bidTime = (cells[2] as HTMLElement).innerText?.trim() || new Date().toISOString();
 
                 if (!amount) return null;
 
                 return {
                     bidderId,
                     amount,
-                    bidTime,
-                    riskLevel: 'LOW'
+                    bidTime
                 };
-            }).filter(b => b);
+            }).filter((b): b is { bidderId: string; amount: number; bidTime: string } => b !== null);
         });
 
         return bids;
