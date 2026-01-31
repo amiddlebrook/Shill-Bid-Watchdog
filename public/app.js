@@ -277,8 +277,6 @@ async function acknowledgeAlert(id) {
   } catch (error) {
     log('Failed to acknowledge', 'error');
   }
-  log('Failed to acknowledge', 'error');
-}
 }
 
 // Chat Handler
