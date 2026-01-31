@@ -46,9 +46,20 @@ export async function navigateBidFTA(
 
         // Set realistic viewport and user agent
         await page.setViewport({ width: 1920, height: 1080 });
-        await page.setUserAgent(
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        );
+
+        // Anti-bot stealth: Set real User-Agent and headers
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"'
+        });
+
+        // Navigate to auction page
+        console.log(`[Navigator] Navigating to ${url}...`);
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
         // Wait for body to ensure page loaded
         await page.waitForSelector('body', { timeout: 10000 });
@@ -104,11 +115,9 @@ export async function navigateBidFTA(
         console.log(`[Navigator] Found ${bids.length} bids`);
 
         // Capture page text for debugging if extraction fails
-        let debugText = '';
-        if (itemName === 'Unknown Item' || bids.length === 0) {
-            debugText = await page.evaluate(() => document.body.innerText.substring(0, 1000));
-            console.log('[Navigator] Debug content:', debugText);
-        }
+        // Capture page text for debugging (Always capture for diagnosis)
+        const debugText = await page.evaluate(() => document.body.innerText.substring(0, 2000));
+        console.log('[Navigator] Debug content length:', debugText.length);
 
         await browser.close();
 
