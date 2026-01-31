@@ -128,7 +128,7 @@ app.delete('/api/auctions/:id', async (c) => {
 
         return c.json({ success: true, deleted: true });
     } catch (error) {
-        return c.json({ success: false, error: 'Failed to delete' }, 500);
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to delete' }, 500);
     }
 });
 
