@@ -1,0 +1,28 @@
+[project]
+name = "shillbid-watchdog"
+version = "0.1.0"
+description = "External-only watchdog for detecting likely shill bidders in online auction houses"
+requires-python = ">=3.7"
+dependencies = [
+  "playwright",
+  "beautifulsoup4",
+  "requests",
+  "pydantic",
+  "sqlalchemy",
+  "psycopg2-binary",
+  "networkx",
+  "fastapi",
+  "uvicorn",
+  "lxml",
+]
+
+[project.scripts]
+shill-watchdog = "src.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
