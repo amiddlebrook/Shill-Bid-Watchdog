@@ -458,45 +458,57 @@ app.post('/api/chat', async (c) => {
             const auctionId = extractAuctionId(url);
 
             // Check if already watching
-            const existing = await c.env.DB.prepare('SELECT * FROM auctions WHERE auction_id = ?').bind(auctionId).first();
+            const existing = await c.env.DB.prepare('SELECT * FROM auctions WHERE auction_id = ?').bind(auctionId).first() as any;
 
-            if (existing) {
+            // If it exists and is NOT deleted, just report it
+            if (existing && existing.status !== 'deleted') {
                 contextInfo = `The user mentioned auction ${auctionId}, which we are already watching. Status: ${existing.status}. Item: ${existing.item_name}.`;
             } else {
-                // Add to watch list
-                // Add to watch list and get ID
-                const newAuction = await c.env.DB.prepare(`
-                    INSERT INTO auctions (auction_id, source, url, status)
-                    VALUES (?, ?, ?, 'watching')
-                    RETURNING id
-                `).bind(auctionId, detectSource(url), url).first();
+                let targetId: number | undefined;
 
-                const newId = newAuction?.id;
+                if (existing && existing.status === 'deleted') {
+                    // Restore deleted auction
+                    await c.env.DB.prepare("UPDATE auctions SET status = 'watching', updated_at = datetime('now') WHERE id = ?").bind(existing.id).run();
+                    targetId = existing.id;
+                } else {
+                    // Insert new
+                    const newAuction = await c.env.DB.prepare(`
+                        INSERT INTO auctions (auction_id, source, url, status)
+                        VALUES (?, ?, ?, 'watching')
+                        RETURNING id
+                    `).bind(auctionId, detectSource(url), url).first() as any;
+                    targetId = newAuction?.id;
+                }
 
                 // Trigger EXTRACTION synchronously
-                const coordinatorId = c.env.COORDINATOR.idFromName('main');
-                const coordinator = c.env.COORDINATOR.get(coordinatorId);
+                // Only proceed if we have a target ID
+                if (targetId) {
+                    const coordinatorId = c.env.COORDINATOR.idFromName('main');
+                    const coordinator = c.env.COORDINATOR.get(coordinatorId);
 
-                // Wait for the agent to navigate and extract
-                await coordinator.fetch(new Request('http://internal/run-task-sync', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        taskType: 'navigate_auction',
-                        targetUrl: url,
-                        auctionId: newId,
-                        scheduledAt: new Date().toISOString()
-                    })
-                }));
+                    // Wait for the agent to navigate and extract
+                    await coordinator.fetch(new Request('http://internal/run-task-sync', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            taskType: 'navigate_auction',
+                            targetUrl: url,
+                            auctionId: targetId,
+                            scheduledAt: new Date().toISOString()
+                        })
+                    }));
 
-                // Fetch the FRESH data
-                const freshData = await c.env.DB.prepare('SELECT * FROM auctions WHERE id = ?').bind(newId).first();
+                    // Fetch the FRESH data
+                    const freshData = await c.env.DB.prepare('SELECT * FROM auctions WHERE id = ?').bind(targetId).first();
 
-                if (freshData?.status === 'extracted' || freshData?.item_name) {
-                    contextInfo = `I have successfully added and SCANNED the auction. Item: "${freshData.item_name}". Price: $${freshData.current_price}. Status: ${freshData.status}.`;
-                } else if (freshData?.status === 'error') {
-                    contextInfo = `I tried to scan the auction but encountered an error. Status: error.`;
+                    if (freshData?.status === 'extracted' || freshData?.item_name) {
+                        contextInfo = `I have successfully added and SCANNED the auction. Item: "${freshData.item_name}". Price: $${freshData.current_price}. Status: ${freshData.status}.`;
+                    } else if (freshData?.status === 'error') {
+                        contextInfo = `I tried to scan the auction but encountered an error. Status: error.`;
+                    } else {
+                        contextInfo = `I added the auction but the scan is still pending/incomplete.`;
+                    }
                 } else {
-                    contextInfo = `I added the auction but the scan is still pending/incomplete.`;
+                    contextInfo = `Failed to track auction (DB Error).`;
                 }
             }
         }
