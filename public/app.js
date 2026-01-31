@@ -14,8 +14,80 @@ const state = {
   currentPlatform: 'bidfta',
   selectedAuction: null,
   lastUpdate: null,
-  apiStatus: 'checking'
+  apiStatus: 'checking',
+  chatHistory: [{ role: 'system', content: 'Watchdog AI Online. Paste a BidFTA URL to start watching, or ask me anything.' }]
 };
+
+// Inject Chat Styles
+const style = document.createElement('style');
+style.textContent = `
+  .chat-terminal {
+      background: #0d1117; /* GitHub Dark Dimmed */
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+  }
+  .chat-history {
+      height: 350px;
+      overflow-y: auto;
+      padding: 1rem;
+      font-size: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+  }
+  .chat-message {
+      max-width: 85%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      line-height: 1.4;
+      word-wrap: break-word;
+  }
+  .chat-message.user {
+      align-self: flex-end;
+      background: #1f6feb; /* Blue */
+      color: white;
+  }
+  .chat-message.bot {
+      align-self: flex-start;
+      background: #238636; /* Green */
+      color: white;
+      border-bottom-left-radius: 0;
+  }
+  .chat-message.system {
+      align-self: center;
+      color: #8b949e;
+      font-style: italic;
+      font-size: 0.8rem;
+  }
+  .chat-input-area {
+      border-top: 1px solid #30363d;
+      padding: 0.8rem;
+      background: #161b22;
+  }
+  .chat-input-area input {
+      background: transparent;
+      border: none;
+      color: #c9d1d9;
+      width: 100%;
+      outline: none;
+      font-family: inherit;
+  }
+  .typing-indicator::after {
+      content: '...';
+      animation: dots 1.5s steps(5, end) infinite;
+  }
+  @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60% { content: '...'; }
+      80%, 100% { content: ''; }
+  }
+`;
+document.head.appendChild(style);
 
 // Logging
 function log(message, type = 'info') {
@@ -205,6 +277,81 @@ async function acknowledgeAlert(id) {
   } catch (error) {
     log('Failed to acknowledge', 'error');
   }
+  log('Failed to acknowledge', 'error');
+}
+}
+
+// Chat Handler
+async function handleChatMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+
+  // Add User Message
+  state.chatHistory.push({ role: 'user', content: message });
+  input.value = '';
+  renderChat(); // Re-render chat immediately
+  scrollToBottom();
+
+  // Show Typing Indicator
+  const typingId = 'typing-' + Date.now();
+  state.chatHistory.push({ role: 'typing', id: typingId });
+  renderChat();
+  scrollToBottom();
+
+  try {
+    // Call AI Backend
+    const res = await api('/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        history: state.chatHistory.filter(m => m.role !== 'typing').map(m => ({ role: m.role, content: m.content }))
+      })
+    });
+
+    // Remove Typing
+    state.chatHistory = state.chatHistory.filter(m => m.role !== 'typing');
+
+    if (res.success) {
+      state.chatHistory.push({ role: 'bot', content: res.message });
+      if (res.actionTaken) {
+        log('AI performed an action', 'success');
+        await loadData(); // Refresh data if AI mocked an action
+      }
+    } else {
+      state.chatHistory.push({ role: 'system', content: `Error: ${res.error}` });
+    }
+  } catch (error) {
+    state.chatHistory = state.chatHistory.filter(m => m.role !== 'typing');
+    state.chatHistory.push({ role: 'system', content: 'Connection error. Agent offline.' });
+  }
+
+  renderChat();
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  const history = document.getElementById('chatHistory');
+  if (history) history.scrollTop = history.scrollHeight;
+}
+
+function renderChat() {
+  // Only re-render the history part to avoid losing focus if used elsewhere
+  const container = document.getElementById('chatHistory');
+  if (container) {
+    container.innerHTML = state.chatHistory.map(msg => {
+      if (msg.role === 'typing') {
+        return `<div class="chat-message bot"><span class="typing-indicator">Thinking</span></div>`;
+      }
+      // Simple markdown-ish parsing for links
+      const content = msg.content
+        .replace(/\n/g, '<br>')
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:white;text-decoration:underline">$1</a>');
+
+      return `<div class="chat-message ${msg.role}">${content}</div>`;
+    }).join('');
+  }
 }
 
 // Event Handlers
@@ -318,6 +465,41 @@ function Sidebar() {
             </div>
         </aside>
     `;
+  <div class="nav-section">
+    <div class="nav-title">Last Updated</div>
+    <div class="text-sm text-muted" style="padding: 0 var(--space-2)">
+      ${state.lastUpdate ? state.lastUpdate.toLocaleTimeString() : 'Never'}
+    </div>
+  </div>
+        </aside >
+    `;
+}
+
+function ChatConsole() {
+    return `
+    < div class="card mb-4 chat-terminal" >
+            <div class="card-header border-bottom border-secondary d-flex justify-content-between">
+                <span class="card-title text-success">◆ Watchdog AI Agent</span>
+                <span class="badge bg-success" style="font-size: 0.7rem">ONLINE</span>
+            </div>
+            <div id="chatHistory" class="chat-history">
+                ${state.chatHistory.map(msg => {
+                    const content = msg.content || '';
+                     if (msg.role === 'typing') return `<div class="chat-message bot">Thinking...</div>`;
+                     const formatted = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline">$1</a>');
+                    return `<div class="chat-message ${msg.role}">${formatted}</div>`;
+                }).join('')}
+            </div>
+            <div class="chat-input-area">
+                <form onsubmit="handleChatMessage(event)">
+                    <div style="display: flex; align-items: center;">
+                        <span style="color: #238636; margin-right: 8px;">❯</span>
+                        <input type="text" id="chatInput" placeholder="Command (e.g., 'Watch this URL', 'Analyze auction 123')" autocomplete="off">
+                    </div>
+                </form>
+            </div>
+        </div >
+    `;
 }
 
 // ============================================================================
@@ -326,32 +508,16 @@ function Sidebar() {
 
 function DashboardView() {
   return `
-        <main class="main">
+    < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Dashboard</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
             </div>
             
-            <!-- Watch Form -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <span class="card-title">Watch Auction</span>
-                </div>
-                <div class="card-body">
-                    <form onsubmit="handleSubmit(event)">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">BidFTA Auction URL</label>
-                                <input type="url" id="urlInput" class="form-input" 
-                                    placeholder="https://www.bidfta.com/569416/item-detail/50968437" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Watch</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            <!--AI Chat Agent-- >
+    ${ ChatConsole() }
             
-            <!-- Stats Grid -->
+            < !--Stats Grid-- >
             <div class="grid-4">
                 ${StatCard('Auctions', state.stats.totalAuctions)}
                 ${StatCard('Alerts', state.stats.activeAlerts, 'critical')}
@@ -359,7 +525,7 @@ function DashboardView() {
                 ${StatCard('Analyzed', state.auctions.filter(a => a.last_checked).length)}
             </div>
             
-            <!-- Activity Log -->
+            <!--Activity Log-- >
             <div class="card mb-4">
                 <div class="card-header">
                     <span class="card-title">Activity Log</span>
@@ -372,29 +538,29 @@ function DashboardView() {
                 </div>
             </div>
             
-            <!-- Recent Auctions -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Recent Auctions</span>
-                    <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
-                </div>
-                <div class="card-body" style="padding: 0">
-                    ${AuctionsTable(state.auctions.slice(0, 5))}
-                </div>
-            </div>
-        </main>
+            <!--Recent Auctions-- >
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Auctions</span>
+        <button class="btn btn-sm btn-secondary" onclick="navigate('auctions')">View All</button>
+      </div>
+      <div class="card-body" style="padding: 0">
+        ${AuctionsTable(state.auctions.slice(0, 5))}
+      </div>
+    </div>
+        </main >
     `;
 }
 
 function AuctionsView() {
   return `
-        <main class="main">
+    < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Auctions</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
             </div>
             
-            <!-- Quick Add -->
+            <!--Quick Add-- >
             <div class="card mb-4">
                 <div class="card-body">
                     <form onsubmit="handleSubmit(event)">
@@ -409,16 +575,16 @@ function AuctionsView() {
                 </div>
             </div>
             
-            <!-- Auctions Table -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">All Auctions (${state.auctions.length})</span>
-                </div>
-                <div class="card-body" style="padding: 0">
-                    ${AuctionsTable(state.auctions, true)}
-                </div>
-            </div>
-        </main>
+            <!--Auctions Table-- >
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">All Auctions (${state.auctions.length})</span>
+      </div>
+      <div class="card-body" style="padding: 0">
+        ${AuctionsTable(state.auctions, true)}
+      </div>
+    </div>
+        </main >
     `;
 }
 
@@ -426,11 +592,11 @@ function AuctionDetailView() {
   const { auction, bids, alerts } = state.selectedAuction || {};
 
   if (!auction) {
-    return `<main class="main"><div class="empty-state">Loading...</div></main>`;
+    return `< main class="main" > <div class="empty-state">Loading...</div></main > `;
   }
 
   return `
-        <main class="main">
+    < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">
                     <span class="text-muted" style="cursor:pointer" onclick="navigate('auctions')">Auctions /</span>
@@ -444,7 +610,7 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!-- Auction Info -->
+            <!--Auction Info-- >
             <div class="grid-4 mb-4">
                 ${StatCard('Risk Level', auction.risk_level || 'NONE', (auction.risk_level || 'none').toLowerCase())}
                 ${StatCard('Risk Score', auction.risk_score || 0)}
@@ -452,7 +618,7 @@ function AuctionDetailView() {
                 ${StatCard('Alerts', alerts?.length || 0, alerts?.length > 0 ? 'high' : '')}
             </div>
             
-            <!-- Details -->
+            <!--Details -->
             <div class="card mb-4">
                 <div class="card-header"><span class="card-title">Details</span></div>
                 <div class="card-body">
@@ -467,7 +633,7 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!-- Bid History -->
+            <!--Bid History-- >
             <div class="card mb-4">
                 <div class="card-header"><span class="card-title">Bid History (${bids?.length || 0})</span></div>
                 <div class="card-body" style="padding: 0">
@@ -491,8 +657,8 @@ function AuctionDetailView() {
                 </div>
             </div>
             
-            <!-- Alerts for this auction -->
-            ${alerts && alerts.length > 0 ? `
+            <!--Alerts for this auction-- >
+    ${ alerts && alerts.length > 0 ? `
                 <div class="card">
                     <div class="card-header"><span class="card-title">Alerts</span></div>
                     <div class="card-body" style="padding: 0">
@@ -500,13 +666,13 @@ function AuctionDetailView() {
                     </div>
                 </div>
             ` : ''}
-        </main>
-    `;
+        </main >
+  `;
 }
 
 function AlertsView() {
   return `
-        <main class="main">
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Alerts</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -523,8 +689,8 @@ function AlertsView() {
     }
                 </div>
             </div>
-        </main>
-    `;
+        </main >
+  `;
 }
 
 function BiddersView() {
@@ -535,7 +701,7 @@ function BiddersView() {
   });
 
   return `
-        <main class="main">
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Bidders</h1>
                 <button class="btn btn-secondary" onclick="loadData()">Refresh</button>
@@ -553,13 +719,13 @@ function BiddersView() {
                     </div>
                 </div>
             </div>
-        </main>
-    `;
+        </main >
+  `;
 }
 
 function LogsView() {
   return `
-        <main class="main">
+  < main class="main" >
             <div class="page-header">
                 <h1 class="page-title">Activity Log</h1>
                 <button class="btn btn-secondary" onclick="state.logs = []; render()">Clear</button>
@@ -572,8 +738,8 @@ function LogsView() {
                     </div>
                 </div>
             </div>
-        </main>
-    `;
+        </main >
+  `;
 }
 
 // ============================================================================
@@ -581,19 +747,19 @@ function LogsView() {
 // ============================================================================
 
 function StatCard(label, value, risk = '') {
-  const color = risk ? `style="color: var(--risk-${risk})"` : '';
+  const color = risk ? `style = "color: var(--risk-${risk})"` : '';
   return `
-        <div class="stat-card">
+  < div class="stat-card" >
             <div class="stat-label">${label}</div>
             <div class="stat-value" ${color}>${value}</div>
-        </div>
-    `;
+        </div >
+  `;
 }
 
 async function deleteAuction(id) {
   if (!confirm('Are you sure you want to delete this auction?')) return;
   try {
-    const res = await api(`/auctions/${id}`, { method: 'DELETE' });
+    const res = await api(`/ auctions / ${ id } `, { method: 'DELETE' });
     if (res.success) {
       log('Auction deleted', 'success');
       if (state.currentView === 'auction-detail') navigate('auctions');
@@ -610,21 +776,21 @@ function AuctionsTable(auctions, showActions = false) {
   }
 
   return `
-        <div class="table-container">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Auction ID</th>
-                        <th>Item</th>
-                        <th>Status</th>
-                        <th>Risk</th>
-                        <th>Bids</th>
-                        <th>Last Checked</th>
-                        ${showActions ? '<th>Actions</th>' : ''}
-                    </tr>
-                </thead>
-                <tbody>
-                    ${auctions.map(a => `
+  < div class="table-container" >
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Auction ID</th>
+          <th>Item</th>
+          <th>Status</th>
+          <th>Risk</th>
+          <th>Bids</th>
+          <th>Last Checked</th>
+          ${showActions ? '<th>Actions</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${auctions.map(a => `
                         <tr>
                             <td>
                                 <span class="text-mono table-link" onclick="viewAuction(${a.id})" style="cursor:pointer">
@@ -649,15 +815,15 @@ function AuctionsTable(auctions, showActions = false) {
                             ` : ''}
                         </tr>
                     `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
+      </tbody>
+    </table>
+        </div >
+  `;
 }
 
 function AlertItem(alert) {
   return `
-        <div class="alert-item">
+  < div class="alert-item" >
             <div class="alert-indicator ${(alert.risk_level || 'low').toLowerCase()}"></div>
             <div class="alert-content">
                 <div class="alert-title">${alert.item_name || alert.auction_code || 'Alert'}</div>
@@ -666,8 +832,8 @@ function AlertItem(alert) {
                 </div>
             </div>
             <button class="btn btn-sm btn-secondary" onclick="acknowledgeAlert(${alert.id})">Dismiss</button>
-        </div>
-    `;
+        </div >
+  `;
 }
 
 function renderLogs(count) {
@@ -676,11 +842,11 @@ function renderLogs(count) {
     return '<div class="empty-state">No activity yet</div>';
   }
   return logs.map(e => `
-        <div class="log-entry ${e.type}">
+  < div class="log-entry ${e.type}" >
             <span class="log-time">${e.time}</span>
             <span class="log-message">${e.message}</span>
-        </div>
-    `).join('');
+        </div >
+  `).join('');
 }
 
 function formatTime(isoString) {
@@ -690,8 +856,8 @@ function formatTime(isoString) {
   const diff = now - date;
 
   if (diff < 60000) return 'Just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 3600000) return `${ Math.floor(diff / 60000) }m ago`;
+  if (diff < 86400000) return `${ Math.floor(diff / 3600000) }h ago`;
   return date.toLocaleDateString();
 }
 
@@ -713,15 +879,15 @@ function render() {
   }
 
   root.innerHTML = `
-        <div class="app">
-            ${Header()}
-            ${Tabs()}
-            <div class="app-content">
-                ${Sidebar()}
-                ${mainContent}
-            </div>
-        </div>
-    `;
+  < div class="app" >
+    ${ Header() }
+            ${ Tabs() }
+<div class="app-content">
+  ${Sidebar()}
+  ${mainContent}
+</div>
+        </div >
+  `;
 
   updateStatusIndicator();
 }

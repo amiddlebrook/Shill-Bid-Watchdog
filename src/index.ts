@@ -431,44 +431,133 @@ app.get('/api/stats', async (c) => {
             error: error instanceof Error ? error.message : 'Unknown error'
         }, 500);
     }
-});
+    // AI Chat Endpoint
+    app.post('/api/chat', async (c) => {
+        try {
+            const body = await c.req.json<{ message: string; history?: any[] }>();
+            const { message, history } = body;
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
+            // 1. Check for URL in message
+            const urlMatch = message.match(/https?:\/\/[^\s]+/);
+            let actionResult = null;
+            let contextInfo = '';
 
-function extractAuctionId(url: string): string {
-    // BidFTA new format: https://www.bidfta.com/569416/item-detail/50968437
-    // Pattern: /item-detail/12345678
-    const bidfitaDetailMatch = url.match(/item-detail\/(\d+)/i);
-    if (bidfitaDetailMatch) return `bidfta-${bidfitaDetailMatch[1]}`;
+            if (urlMatch) {
+                // User provided a URL, try to watch it
+                const url = urlMatch[0];
+                const auctionId = extractAuctionId(url);
 
-    // BidFTA old format: https://www.bidfta.com/items?item=123456
-    const bidfitaQueryMatch = url.match(/[?&]item=(\d+)/i);
-    if (bidfitaQueryMatch) return `bidfta-${bidfitaQueryMatch[1]}`;
+                // Check if already watching
+                const existing = await c.env.DB.prepare('SELECT * FROM auctions WHERE auction_id = ?').bind(auctionId).first();
 
-    // eBay: https://www.ebay.com/itm/123456
-    const ebayMatch = url.match(/itm[\\/=](\d+)/i);
-    if (ebayMatch) return `ebay-${ebayMatch[1]}`;
+                if (existing) {
+                    contextInfo = `The user mentioned auction ${auctionId}, which we are already watching. Status: ${existing.status}. Item: ${existing.item_name}.`;
+                } else {
+                    // Add to watch list
+                    await c.env.DB.prepare(`
+                    INSERT INTO auctions (auction_id, source, url, status)
+                    VALUES (?, ?, ?, 'watching')
+                `).bind(auctionId, detectSource(url), url).run();
 
-    // Fallback: hash the URL
-    return `unknown-${hashCode(url)}`;
-}
+                    // Trigger extraction
+                    const coordinatorId = c.env.COORDINATOR.idFromName('main');
+                    const coordinator = c.env.COORDINATOR.get(coordinatorId);
+                    await coordinator.fetch(new Request('http://internal/queue-task', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            taskType: 'navigate_auction',
+                            targetUrl: url,
+                            auctionId,
+                            scheduledAt: new Date().toISOString()
+                        })
+                    }));
 
-function detectSource(url: string): 'bidfta' | 'ebay' | 'other' {
-    if (url.includes('bidfta.com')) return 'bidfta';
-    if (url.includes('ebay.com')) return 'ebay';
-    return 'other';
-}
+                    contextInfo = `I have automatically added the URL ${url} to the watch list and queued a scan.`;
+                }
+            }
 
-function hashCode(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
+            // 2. Run AI logic
+            const systemPrompt = `You are the ShillBid Watchdog AI, an expert in detecting auction fraud on platforms like BidFTA.
+        Your goal is to help users analyze auctions, understand shill bidding, and manage their watch list.
+        
+        Capabilities:
+        - If the user provides a URL, I have ALREADY added it to the watch list for them (confirmed in context).
+        - If asked to "analyze" or "scan", confirm that the system runs automated analysis on all watched items.
+        - Explain risk scores: High risk means suspicious bidding patterns (same bidder, rapid bids).
+        
+        Current Context: ${contextInfo}
+        
+        Keep responses concise, professional, and helpful. Use markdown for formatting.`;
+
+            const aiResponse = await runAI(c.env, systemPrompt, message, history || []);
+
+            return c.json({
+                success: true,
+                message: aiResponse,
+                actionTaken: !!urlMatch
+            });
+        } catch (error) {
+            return c.json({ success: false, error: error instanceof Error ? error.message : 'AI Error' }, 500);
+        }
+    });
+
+    async function runAI(env: Env, system: string, userMessage: string, history: any[]) {
+        // Format history for Llama-3
+        const messages = [
+            { role: 'system', content: system },
+            ...history.slice(-4), // Keep last 4 turns for context
+            { role: 'user', content: userMessage }
+        ];
+
+        try {
+            const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+                messages
+            });
+
+            // Response format depends on model, Llama-3 usually returns { response: string }
+            return (response as any).response || "I'm having trouble thinking right now.";
+        } catch (e) {
+            console.error('AI Error:', e);
+            return "I'm offline right now (AI Error).";
+        }
     }
-    return Math.abs(hash).toString(36);
-}
 
-export default app;
+    // ============================================================================
+    // Helper Functions
+    // ============================================================================
+
+    function extractAuctionId(url: string): string {
+        // BidFTA new format: https://www.bidfta.com/569416/item-detail/50968437
+        // Pattern: /item-detail/12345678
+        const bidfitaDetailMatch = url.match(/item-detail\/(\d+)/i);
+        if (bidfitaDetailMatch) return `bidfta-${bidfitaDetailMatch[1]}`;
+
+        // BidFTA old format: https://www.bidfta.com/items?item=123456
+        const bidfitaQueryMatch = url.match(/[?&]item=(\d+)/i);
+        if (bidfitaQueryMatch) return `bidfta-${bidfitaQueryMatch[1]}`;
+
+        // eBay: https://www.ebay.com/itm/123456
+        const ebayMatch = url.match(/itm[\\/=](\d+)/i);
+        if (ebayMatch) return `ebay-${ebayMatch[1]}`;
+
+        // Fallback: hash the URL
+        return `unknown-${hashCode(url)}`;
+    }
+
+    function detectSource(url: string): 'bidfta' | 'ebay' | 'other' {
+        if (url.includes('bidfta.com')) return 'bidfta';
+        if (url.includes('ebay.com')) return 'ebay';
+        return 'other';
+    }
+
+    function hashCode(str: string): string {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
+    }
+
+    export default app;
