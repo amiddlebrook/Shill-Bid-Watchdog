@@ -181,6 +181,20 @@ async function analyzeAuction(id) {
   }
 }
 
+async function forceExtract(id) {
+  log(`Triggering re-scan for ${id}...`, 'info');
+  try {
+    const res = await api(`/auctions/${id}/extract`, { method: 'POST' });
+    if (res.success) {
+      log('Re-scan queued', 'success');
+    } else {
+      log('Re-scan failed', 'error');
+    }
+  } catch (error) {
+    log('Failed to queue re-scan', 'error');
+  }
+}
+
 async function acknowledgeAlert(id) {
   log(`Acknowledging alert ${id}...`, 'info');
   try {
@@ -423,6 +437,7 @@ function AuctionDetailView() {
                 </h1>
                 <div style="display: flex; gap: var(--space-2)">
                     <button class="btn btn-secondary" onclick="analyzeAuction(${auction.id})">Analyze</button>
+                    <button class="btn btn-secondary" onclick="forceExtract(${auction.id})">Re-Scan</button>
                     <a href="${auction.url}" target="_blank" class="btn btn-secondary">Open</a>
                     <button class="btn btn-secondary" style="color: var(--risk-critical); border-color: var(--risk-critical)" onclick="deleteAuction(${auction.id})">Delete</button>
                 </div>

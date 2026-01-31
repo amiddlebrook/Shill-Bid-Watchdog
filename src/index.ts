@@ -157,6 +157,57 @@ app.get('/api/auctions', async (c) => {
     }
 });
 
+// Trigger analysis
+app.post('/api/auctions/:id/analyze', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const auction = await c.env.DB.prepare('SELECT * FROM auctions WHERE id = ?').bind(id).first();
+        if (!auction) return c.json({ success: false, error: 'Auction not found' }, 404);
+
+        const coordinatorId = c.env.COORDINATOR.idFromName('main');
+        const coordinator = c.env.COORDINATOR.get(coordinatorId);
+
+        await coordinator.fetch(new Request('http://internal/queue-task', {
+            method: 'POST',
+            body: JSON.stringify({
+                taskType: 'analyze_auction', // Assuming this task type is supported
+                auctionId: auction.id,
+                scheduledAt: new Date().toISOString()
+            })
+        }));
+
+        return c.json({ success: true, queued: true });
+    } catch (error) {
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed' }, 500);
+    }
+});
+
+// Trigger re-extraction
+app.post('/api/auctions/:id/extract', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const auction = await c.env.DB.prepare('SELECT * FROM auctions WHERE id = ?').bind(id).first();
+        if (!auction) return c.json({ success: false, error: 'Auction not found' }, 404);
+
+        const coordinatorId = c.env.COORDINATOR.idFromName('main');
+        const coordinator = c.env.COORDINATOR.get(coordinatorId);
+
+        await coordinator.fetch(new Request('http://internal/queue-task', {
+            method: 'POST',
+            body: JSON.stringify({
+                taskType: 'navigate_auction',
+                targetUrl: auction.url,
+                auctionId: auction.id,
+                scheduledAt: new Date().toISOString()
+            })
+        }));
+
+        return c.json({ success: true, queued: true });
+    } catch (error) {
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed' }, 500);
+    }
+});
+
 // Get auction details with bids
 app.get('/api/auctions/:id', async (c) => {
     try {
