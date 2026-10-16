@@ -151,3 +151,12 @@ export default {
     }
   }
 };
+
+
+// Legacy Durable Object export retained for deployment compatibility.
+// v2 does not call this class; preserving the export avoids destroying archived DO state.
+export class CoordinatorAgent {
+  async fetch() {
+    return Response.json({ success: false, error: 'Legacy coordinator is retired; use the v2 API.' }, { status: 410 });
+  }
+}
