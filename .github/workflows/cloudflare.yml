@@ -28,6 +28,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WATCHDOG_ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,4 +44,21 @@ jobs:
       - name: Apply additive D1 migrations
         run: npx wrangler d1 migrations apply shillbid-watchdog-db --remote
       - name: Deploy Cloudflare Worker + UI
-        run: npx wrangler deploy
+        run: npx wrangler deploy | tee deploy-output.log
+      - name: Set admin token from GitHub secret (if provided)
+        if: env.WATCHDOG_ADMIN_TOKEN != ''
+        run: printf '%s' "$WATCHDOG_ADMIN_TOKEN" | npx wrangler secret put ADMIN_TOKEN
+      - name: Verify deployed Worker health
+        run: |
+          set -euo pipefail
+          DEPLOY_URL="$(grep -Eo 'https://[a-zA-Z0-9.-]+[.]workers[.]dev' deploy-output.log | tail -1)"
+          test -n "$DEPLOY_URL"
+          echo "Cloudflare endpoint: $DEPLOY_URL"
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 "$DEPLOY_URL/api/health" | node -e "
+            let json = ''; process.stdin.on('data', c => json += c);
+            process.stdin.on('end', () => {
+              const data = JSON.parse(json);
+              if (!data.success || data.data?.status !== 'healthy' || !data.data?.storage) process.exit(1);
+              console.log('Cloudflare Worker is responding and has the D1 binding. Auth configured:', data.data.authConfigured);
+            });
+          "
