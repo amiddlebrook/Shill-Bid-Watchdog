@@ -14,3 +14,13 @@ binding = "DB"
 database_name = "shillbid-watchdog-db"
 database_id = "67de689d-41c6-4762-8e8f-894457b9a9c1"
 migrations_dir = "migrations"
+
+# Preserve legacy Durable Object namespace without using it in the v2 application.
+# Removing the class requires a destructive migration that permanently deletes its storage.
+[[durable_objects.bindings]]
+name = "COORDINATOR"
+class_name = "CoordinatorAgent"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["CoordinatorAgent"]
