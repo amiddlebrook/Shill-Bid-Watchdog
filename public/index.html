@@ -1,25 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShillBid Watchdog</title>
-  <meta name="description" content="AI-powered shill-bid detection for online auctions">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b111b">
+  <meta name="description" content="A transparent auction bid-pattern investigation dashboard. Track bids, review risk signals, and keep the evidence.">
+  <title>ShillBid Watchdog — Auction intelligence</title>
   <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" type="module" defer></script>
 </head>
-
 <body>
-  <div id="root">
-    <div
-      style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #8b949e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-      <div style="text-align: center;">
-        <div style="font-size: 32px; margin-bottom: 16px;">⏳</div>
-        <div>Loading ShillBid Watchdog...</div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-icon">◈</div><div><strong>SHILLBID</strong><span>WATCHDOG / V2</span></div></div>
+      <div class="nav-label">WORKSPACE</div>
+      <nav aria-label="Primary navigation">
+        <button class="nav active" data-view="overview"><span class="nav-icon">◫</span> Overview</button>
+        <button class="nav" data-view="auctions"><span class="nav-icon">▦</span> Watchlist <span class="nav-count" id="nav-auctions">0</span></button>
+        <button class="nav" data-view="alerts"><span class="nav-icon">⚑</span> Signals <span class="nav-count" id="nav-alerts">0</span></button>
+        <button class="nav" data-view="guide"><span class="nav-icon">◇</span> Methodology</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="side-panel"><span class="dot mint"></span><span>FREE TIER READY</span><small>Workers · D1 · Static assets</small></div>
+        <p>Evidence-led screening. A pattern is not proof of wrongdoing.</p>
       </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumbs"><span class="mobile-brand">◈ SHILLBID</span><span class="desktop-breadcrumb">WORKSPACE <span class="breadcrumb-chevron">/</span></span><strong id="breadcrumb">Overview</strong></div>
+        <div class="top-actions"><div class="connection"><span class="dot" id="connection-dot"></span><span id="connection-text">Preview mode</span></div><button class="button subtle" id="auth-button">Connect workspace</button><button class="button primary" id="new-watch">＋ <span>Track auction</span></button></div>
+      </header>
+      <main class="content" id="content" aria-live="polite"></main>
+      <footer class="footer"><span>SHILLBID / INVESTIGATIONS</span><span>Built on Cloudflare · No paid services required</span></footer>
     </div>
   </div>
-  <script src="/app.js"></script>
+  <div id="modal" class="modal-layer hidden" role="presentation"></div>
+  <div class="toast hidden" id="toast" role="status"></div>
 </body>
-
 </html>
