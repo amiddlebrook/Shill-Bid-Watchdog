@@ -1,52 +1,16 @@
 name = "shill-bid-watchdog"
-main = "src/index.ts"
-compatibility_date = "2024-12-01"
-compatibility_flags = ["nodejs_compat"]
+main = "src/worker.mjs"
+compatibility_date = "2026-10-16"
+workers_dev = true
 
-# Static assets - serve index.html for SPA routes, worker handles API
 [assets]
 directory = "./public"
 binding = "ASSETS"
-html_handling = "auto-trailing-slash"
-not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+not_found_handling = "404-page"
 
-# D1 Database
 [[d1_databases]]
 binding = "DB"
 database_name = "shillbid-watchdog-db"
 database_id = "67de689d-41c6-4762-8e8f-894457b9a9c1"
-
-# KV Namespace for caching
-[[kv_namespaces]]
-binding = "CACHE"
-id = "9c8633593ef140e6996301d2a8d287f0"
-
-# Browser Rendering for AI Agent navigation
-[browser]
-binding = "BROWSER"
-
-# Workers AI for ML models
-[ai]
-binding = "AI"
-
-# Vectorize for pattern embeddings
-[[vectorize]]
-binding = "VECTORS"
-index_name = "bid-patterns"
-
-# Durable Objects for Agent Coordination
-[[durable_objects.bindings]]
-name = "COORDINATOR"
-class_name = "CoordinatorAgent"
-
-[[migrations]]
-tag = "v1"
-new_classes = ["CoordinatorAgent"]
-
-# Environment variables
-[vars]
-ENVIRONMENT = "production"
-
-[observability.logs]
-enabled = true
-invocation_logs = true
+migrations_dir = "migrations"
